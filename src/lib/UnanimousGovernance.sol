@@ -64,6 +64,34 @@ contract UnanimousGovernance {
         }
     }
 
+    modifier unanimousNoHold(bytes32 taskId) {
+        PendingTaskInfo storage taskInfo = PendingTaskLibrary.getTasksSlot()[taskId];
+        PendingTask memory loaded = taskInfo.task;
+        OwnerSet allOwners = OwnersLibrary.getAllOwners();
+
+        // approve
+        require(msg.sender.isOwner(), NotOwner(msg.sender));
+        OwnerSet ownerBit = msg.sender.asOwnerSet();
+        if (loaded.modified == UNSUBMITTED) {
+            emit Submitted(taskId);
+        } else {
+            require(loaded.approvals & ownerBit == EMPTY_SET, AlreadyApproved());
+        }
+        loaded.modified = currentEpoch();
+        loaded.approvals = loaded.approvals | ownerBit;
+
+        // store result
+        emit Approved(taskId, msg.sender);
+        if (loaded.approvals & allOwners == allOwners) {
+            delete taskInfo.task;
+            // execute now
+            _;
+        } else {
+            // wait
+            taskInfo.task = loaded;
+        }
+    }
+
     /// @param taskId The identifier of the pending task to reject
     function _veto(bytes32 taskId) internal {
         // load
