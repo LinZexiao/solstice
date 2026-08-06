@@ -29,7 +29,7 @@ new    total_burn_minted      Cumulative w0 award residual.
 new    total_service_minted   Cumulative service accrual, all explicit streams.
 new    service_accrued[id]    Per explicit stream: current period's gross accrual.
 new    next_transition_epoch  Min effective_epoch over pending_writes; recomputed on
-                              queue/apply/cancel; sentinel when empty. The per-block
+                              queue/apply/cancel; -1 (EPOCH_UNDEFINED) when empty. The per-block
                               path compares this one int and doesn't touch the CID.
 new    swa_timelock_epochs    Per-network hold (7 days mainnet, short on calibnet);
                               migration-set only, FIP-0081 ramp-params pattern.
@@ -40,7 +40,7 @@ Reward calculation uses `SIMPLE_TOTAL = TokenAmount::from_whole(330_000_000)` an
 
 Net roughly +63B on the 165B current f02 state root block (+91B added, -28B from the two deleted totals).
 
-Serialisation is the Filecoin norm of only tuple representation, so "keyed by `(stream_id, wallet)`" is logical only: lookups scan the streams array matching on the stored `id`, and each explicit stream owns its own recipient arrays, so streams can't collide on a shared wallet and a claim rewrites only its own stream's rows. `id`s are SWA-supplied at `RegisterStream` and opaque to f02, which enforces uniqueness across `streams[]`, `tombstones[]`, and pending `RegisterStream` writes, checked at queue time. The SWA keeps the `id`-to-purpose mapping, where `id`s have meaning. Migration pins consensus = 1 and service = 2, matching the w1/w2 subscripts; 0 is reserved (in case we make burn an identified stream later).
+Serialisation is the Filecoin norm of only tuple representation, so "keyed by `(stream_id, wallet)`" is logical only: lookups scan the streams array matching on the stored `id`, and each explicit stream owns its own recipient arrays, so streams can't collide on a shared wallet and a claim rewrites only its own stream's rows. Every keyed array sorts ascending by its key with unique keys (recipient tables by ID address; `streams`, `tombstones`, `service_accrued` by stream id); the queue alone is position-ordered, position being the apply tiebreak. `id`s are SWA-supplied at `RegisterStream` and opaque to f02, which enforces uniqueness across `streams[]`, `tombstones[]`, and pending `RegisterStream` writes, checked at queue time. The SWA keeps the `id`-to-purpose mapping, where `id`s have meaning. Migration pins consensus = 1 and service = 2, matching the w1/w2 subscripts; 0 is reserved (in case we make burn an identified stream later).
 
 The `streams_root` CID links to a block with the following structure:
 
@@ -144,6 +144,7 @@ A "period" in f02 is just the interval between `SetShares` calls: f02 knows no q
 ```
 Claim(stream_id, wallets[]) -> amounts[]:
     if stream_id is neither live nor tombstoned: return zeros(len(wallets))
+    resolve each wallet to ID form; unresolvable wallets are zero entries
     for wallet in wallets:
         if stream_id is a tombstone:
             entitlement = its payable[wallet]              # nothing live on a tombstone
@@ -185,6 +186,20 @@ f02 holds no `EPOCHS_PER_QUARTER` and no quarter logic; quarters, windows, and g
 
 All FRC-0042 exported, since the callers are contracts (a `method_hash!` variant plus `actor_dispatch!` arm each): `SetWeightRecords`, `StepWeightRecords`, `RegisterStream`, `RemoveStream`, `SetDistribution` (SWA-only, queued under the timelock); `SetShares` (designated writer, not queued); `CancelPending` (SWA-relayed; every op but `StepWeightRecords`); `Claim` (permissionless, batched). `StepWeightRecords` is the gate write: payload-identical to `SetWeightRecords`, a separate method so that cancellability is a static per-op rule; which SWA path calls which is SWA code, not an assertion f02 has to trust. The existing methods keep their numbers and signatures; only `AwardBlockReward`'s internals change.
 
+Parameter and return tuples, under the encoding rules above and reusing the state's component types. Registration supplies only the caller-suppliable subset of a distribution, `DistributionInit { writer, shares }`; f02 constructs the full `ExplicitDistribution` with empty accounting tables at application, so an invalid registration is unrepresentable, and the queue payload captures the subset as received. `CancelPending` names a slot exactly as the queue keys it (id null for schedule-wide ops); a mismatched id/op pair is rejected, not ignored. `Claim` resolves each supplied wallet to ID form before matching; an unresolvable wallet is a zero-entitlement entry. All write methods return nothing.
+
+```
+SetWeightRecordsParams  { updates: [[id, WeightRecord], ...] }
+StepWeightRecordsParams   identical to SetWeightRecordsParams
+RegisterStreamParams    { id, weight, distribution: Option<DistributionInit>, activation_epoch }
+RemoveStreamParams      { id }
+SetDistributionParams   { id, writer }
+SetSharesParams         { id, shares: [[recipient, share], ...] }
+CancelPendingParams     { id: Option, op }
+ClaimParams             { id, wallets: [Address, ...] }
+ClaimReturn             { amounts: [TokenAmount, ...] }   # positional with wallets
+```
+
 The timelock is enforced in f02: SWA writes queue with an effective epoch and apply after the hold. The duration is per-network (`swa_timelock_epochs` in state, migration-set only, FIP-0081 ramp-params style; mainnet 7 days, calibnet short).
 
 There are no read methods: contracts submit and rely on f02's call-time validation (reverts are cheap and non-advancing).
@@ -203,7 +218,7 @@ Removing a stream or re-pointing its writer first settles the current period, ex
 
 The queue stores captured calls, not decomposed targets: one entry is the unit of validation, application and cancellation. Per-stream operations key slots by `(id, op)`. `SetWeightRecords` and `StepWeightRecords` each key one schedule-wide slot by `op`, encode `id` as null, and store the complete update batch. Queueing into an occupied slot is rejected, so revising a call is cancel plus requeue and always restarts the hold; no path changes a pending payload while preserving its effective epoch. Due calls apply by effective epoch, with equal epochs retaining queue position. Every mutating method applies due calls first, so the objection window is exactly `[queue, effective)` and `CancelPending` cannot cancel at the effective epoch.
 
-Cancellation is unconditional and never revalidates the remaining queue. It ignores id for schedule-wide operations, refuses `StepWeightRecords`, and treats an empty slot as a benign no-op. A queued call can consequently lose a prerequisite: cancellation can remove a registration required by a later weight update, or a headroom-producing decrease required by an increase.
+Cancellation is unconditional and never revalidates the remaining queue. It names a slot exactly as the queue keys it (id null for schedule-wide operations; a mismatched id/op pair rejects), refuses `StepWeightRecords`, and treats an empty slot as a benign no-op. A queued call can consequently lose a prerequisite: cancellation can remove a registration required by a later weight update, or a headroom-producing decrease required by an increase.
 
 Admission and application use the same transition and validation path. Admission projects earlier queue entries in order, treating calls already stranded by cancellation as future drops. It requires the new call itself to apply atomically and remain valid from its effective epoch onward without relying on later calls, and rejects a new call that would strand any currently valid queued call. At application, a well-formed due call that has lost a prerequisite is removed, emits a drop event, and processing continues; there is no fallback weight vector and the current configuration remains unchanged. A dropped non-terminal `StepWeightRecords` needs no special repair path because the next passing gate submits the full absolute level derived from the SWA counter.
 
