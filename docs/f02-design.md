@@ -30,12 +30,13 @@ new    total_explicit_minted  Cumulative accrual across all explicit streams.
 new    accrued[id]            Per explicit stream: current period's gross accrual.
 new    swa_timelock_epochs    Per-network hold (7 days mainnet, short on calibnet);
                               migration-set only, FIP-0081 ramp-params pattern.
+new    swa_actor              ID-form SWA address; migration-set and immutable.
 new    streams_root (CID)     Everything below.
 ```
 
 Reward calculation uses `SIMPLE_TOTAL = TokenAmount::from_whole(330_000_000)` and `BASELINE_TOTAL = TokenAmount::from_atto(768335872210768889362796814u128)`. The latter is the exact mainnet value fixed by the actors-v2 baseline migration; that migration made the value history-dependent, and Solstice deliberately canonicalises mainnet's value across networks rather than carrying either field forward. At calibnet epoch 3,946,715 the stored value was `769999999891760986050180387` attoFIL, so this cutover reduces `this_epoch_reward` there by approximately 0.0000321% at that state.
 
-Net roughly +62B on the 165B current f02 state root block after removing the two historical totals and adding two issuance counters, ordered current-period accruals, one epoch, and the streams CID. Outstanding explicit-stream liability and the next transition epoch are deliberately derived rather than cached there.
+At current mainnet actor-ID scale, `swa_actor` adds 6B: one CBOR byte-string header, one protocol byte, and a four-byte unsigned-varint ID. Net roughly +68B on the 165B current f02 state root block after removing the two historical totals and adding two issuance counters, ordered current-period accruals, one epoch, the SWA identity, and the streams CID. Outstanding explicit-stream liability and the next transition epoch are deliberately derived rather than cached there.
 
 Serialisation is the Filecoin norm of only tuple representation, so "keyed by `(stream_id, wallet)`" is logical only: lookups scan the streams array matching on the stored `id`, and each explicit stream owns its own recipient arrays, so streams can't collide on a shared wallet and a claim rewrites only its own stream's rows. Every keyed array sorts ascending by its key with unique keys (recipient tables by ID address; `streams`, `tombstones`, `accrued` by stream id); the queue alone is position-ordered, position being the apply tiebreak. `id`s are SWA-supplied at `RegisterStream` and opaque to f02, which enforces uniqueness across `streams[]`, `tombstones[]`, and pending `RegisterStream` writes, checked at queue time. The SWA keeps the `id`-to-purpose mapping; only the SWA gives an `id` meaning. Migration pins consensus = 1 and service = 2, matching the w1/w2 subscripts; 0 is reserved (in case we make burn an identified stream later).
 
@@ -242,6 +243,8 @@ ClaimReturn             { amounts: [TokenAmount, ...] }   # positional with wall
 
 The timelock is enforced in f02: SWA writes queue with an effective epoch and apply after the hold. The duration is per-network (`swa_timelock_epochs` in state, migration-set only, FIP-0081 ramp-params style; mainnet 7 days, calibnet short).
 
+Every SWA-gated method validates the immediate caller against the ID-form `swa_actor` stored in root state. The activation migration sets the deployed SWA ID for each network because Init-assigned actor IDs may differ across TestVM, calibnet, and mainnet. f02 has no setter; replacing the SWA requires a FIP and network upgrade. The SRA needs no global field: each explicit stream's `writer` address authorizes `SetShares`.
+
 There are no read methods: contracts submit and rely on f02's call-time validation (reverts are cheap and non-advancing).
 
 Gate-position correctness is the SWA's job: it must keep its own step counter rather than deriving position from f02's w2, which is stale while a write is queued (a check inside the hold re-fires a step it already fired) and is a fixed-point schedule value rather than a durable count of successful gates. As discrete w2 steps meet its continuously changing ceiling (`1 - w1`), `(w2 - W2_BASE) / W2_STEP` also stops returning an integer, so it cannot provide stable gate position.
@@ -289,7 +292,7 @@ w1 (consensus, id 1, IMPLICIT):  { v_start 0.95, slope -RAMP_SLOPE, floor 0.50, 
 w2 (service,   id 2, EXPLICIT):  { v_start 0.05, slope +RAMP_SLOPE, floor 0.05, cap 0.10 }
 ```
 
-The slopes cancel throughout the half-open Q1 interval, so the weights leave no scheduled w0 share during bootstrap. Independent token-allocation floors can still leave an atto rounding residual, which burns under the exact-residual rule. At the first epoch of Q2, w2 clamps to exactly 10%; the ceiling-divided slope can put w1 below 90% by less than one ramp epoch, and that fixed-point residual burns. No scheduled write is needed to exit the bootstrap ramp. The service stream starts with the single-Orchestrator share map (one wallet, share = `DENOM`) and the SRA as designated writer. `swa_timelock_epochs` is set per network here, the only place it is ever written.
+The slopes cancel throughout the half-open Q1 interval, so the weights leave no scheduled w0 share during bootstrap. Independent token-allocation floors can still leave an atto rounding residual, which burns under the exact-residual rule. At the first epoch of Q2, w2 clamps to exactly 10%; the ceiling-divided slope can put w1 below 90% by less than one ramp epoch, and that fixed-point residual burns. No scheduled write is needed to exit the bootstrap ramp. The service stream starts with the single-Orchestrator share map (one wallet, share = `DENOM`) and the SRA as designated writer. The migration normalizes the deployed SWA to ID form and stores it in `swa_actor`; it also sets `swa_timelock_epochs` per network. This is the only production write to either field.
 
 ## Testing
 
