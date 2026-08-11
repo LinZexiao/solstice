@@ -53,10 +53,9 @@ streams[]        [ id, WeightRecord[v_start, slope, t_start, floor, cap], distri
                               # stream only (the block winner)
   EXPLICIT  = [ writer,       # FIP "designated writer": may call SetShares.
                               # The SRA for the service stream. Not a payee.
-      shares[]:         [[wallet, share], ...]   # payees; <= MAX_RECIPIENTS
-      payable[]:        [[wallet, amount], ...]  # unclaimed from closed (previous) periods
-      claimed_period[]: [[wallet, amount], ...] ] # claims this period; subtract Σ from
-                                                  # accrued for what's still owed
+      shares[]:         [[wallet, share], ...]    # payees; <= MAX_RECIPIENTS
+      payable[]:        [[wallet, amount], ...]   # unclaimed from closed periods
+      claimed_period[]: [[wallet, amount], ...] ] # claimed from the current accrual
 
 tombstones[]     [ [id, payable[]], ... ]
                  # removed streams' outstanding liabilities, kept so claims stay
@@ -82,15 +81,15 @@ Mutation cadence, per method:
 
 The award path already reads and decodes the complete streams block for its weight records. It also derives outstanding explicit-stream liability from the decoded accrual, claim, payable, and tombstone rows before reserving the new reward.
 
-**Block size.** The streams block is one inline block: any write re-serialises all of it, and the award reads all of it per block, so size costs both. Payable and tombstone tails can be drained through permissionless claims, so steady state is config plus active payees. Live payable history is not globally bounded, but removal admission caps the aggregate tombstone rows plus conservative reservations for pending removals.
+**Block size.** The streams block is one inline block: any write re-serialises all of it, and the award reads all of it per block, so size costs both. `payable` is capped per stream and tombstones in aggregate; claims keep normal state close to configuration plus active payees.
 
 ```
 size ≈ 100 + S·(70 + 20·(2N + P))   # S streams, N recipients, P payable rows (rows 20B, 70B/stream fixed);
                                     # queue/tombstones extra, same row arithmetic
-S=1, N=16: 313B idle, 921B every row populated (v1: fine)    S=8, N=64: ~21-31 KB before historical tails    S=100, N=1000: ~4.5 MB (not ok!)
+S=1, N=16: 313B idle, 921B every row populated (v1: fine)    S=8, N=64, P=128: ~41 KB before queue/tombstones
 ```
 
-The FIP fixes `MAX_STREAMS = 8`, `MAX_RECIPIENTS = 64`, `MAX_TOMBSTONE_ROWS = 256`, and `MAX_PENDING_WRITES = 3 * MAX_STREAMS + 2 = 26`. S counts every registered stream, consensus included (the single permitted IMPLICIT stream is ~50B); N is where growth lands, so it gets the headroom. The queue limit is its exact slot space: three per-stream operations and two schedule-wide operations; a 27th entry is rejected. Tombstone admission counts existing payable rows and conservatively reserves `max(MAX_RECIPIENTS, union(payable, shares))` rows for every pending removal. A removal is rejected if that total would exceed 256. While any removal is pending, `SetShares` recomputes the aggregate reservation after its fold and rejects a share change that would exceed the cap. Claims relieve the bound immediately, and a drained tombstone deletes. Raising any limit requires a future FIP and network upgrade that also reshapes the affected structures for the new scale.
+The FIP fixes `MAX_STREAMS = 8`, `MAX_RECIPIENTS = 64`, `MAX_PAYABLE_ROWS_PER_STREAM = 2 * MAX_RECIPIENTS = 128`, `MAX_TOMBSTONE_ROWS = 256`, and `MAX_PENDING_WRITES = 26`. S counts every registered stream, consensus included (the single permitted IMPLICIT stream is ~50B); N is where growth lands, so it gets the headroom. The imposed queue limit, sized for all per-stream operations across a full stream table plus two schedule-wide slots, is enforced by an explicit length check; a 27th entry is rejected. Tombstone admission counts existing payable rows and conservatively reserves `max(MAX_RECIPIENTS, union(payable, shares))` rows for every pending removal. A removal is rejected if that total would exceed 256. While any removal is pending, `SetShares` recomputes the aggregate reservation after its fold and rejects a share change that would exceed the cap. Claims relieve the bound immediately, and a drained tombstone deletes. Raising any limit requires a future FIP and network upgrade that also reshapes the affected structures for the new scale.
 
 `RegisterStream` checks the resulting count, so the eighth stream is valid and a ninth is rejected.
 
@@ -176,6 +175,8 @@ SetShares(stream_id, new_map):
 
 Folding closes the period under its outgoing shares. Earned-but-unclaimed value moves into `payable`, dropped wallets remain claimable, and indivisible residue burns without changing either issuance counter. The accounting rationale is below.
 
+`SetShares` folds a cloned distribution, then admits the new map only when the union of post-fold `payable` recipients and incoming share recipients has at most `MAX_PAYABLE_ROWS_PER_STREAM` entries. It commits the distribution and cleared accrual together; rejection changes neither.
+
 A "period" in f02 is just the interval between `SetShares` calls: f02 knows no quarters, `SetShares` binds immediately whenever the writer sends it, and the quarterly cadence is upstream SRA discipline (`SubmitShares` runs once per quarter, post-verification-window, and submits only what SplitRule computes). The fold is what makes immediate binding safe: earnings materialise under the old shares before the new map applies, so a share change is strictly prospective.
 
 ## Claim (explicit message)
@@ -201,7 +202,7 @@ Claim(stream_id, wallets[]) -> amounts[]:
     return amounts
 ```
 
-Permissionless, batched, recipients fixed by the map, works mid-period. Zero-entitlement entries (unknown wallets, duplicates within the batch) pay nothing and return 0 at their position. An unknown or deleted stream id likewise returns all zeros without writing, so a claim repeated after its tombstone drains is benign. An all-zero batch is a no-op success, not an error: keepers get idempotent re-runs for free.
+Permissionless, batched, recipients fixed by the map, works mid-period. A batch is capped at `MAX_RECIPIENTS`, so a full payable table drains in two calls. Zero-entitlement entries (unknown wallets, duplicates within the batch) pay nothing and return 0 at their position. An unknown or deleted stream id returns all zeros, so a repeated claim after its tombstone drains is benign. An all-zero batch succeeds.
 
 ## Supply accounting
 
@@ -217,7 +218,7 @@ f02's issuance accounting is three stored counters and a derived residual.
 
 Each award adds `BR = miner + explicit + burn` exactly and bumps `T`, `B`, and `S` by their parts. Fold dust was already counted in `S`, so burning it changes no issuance counter; f099's receipts exceed `B` by cumulative dust while `M = T - B - S` remains exact and all three counters stay monotone.
 
-Outstanding explicit-stream liability is derived as `Σ (accrued - Σ claimed_period + Σ payable)` over live streams and tombstones, and f02's balance must cover it. The award path computes it from the streams block already decoded for weight evaluation, avoiding a second state read and a cached scalar that every accrual, claim, fold, removal, and migration must keep synchronized. A due fold's dust is absent from the post-fold liability but remains separately reserved until the actor-layer burn send completes. At the bounded stress shape of eight explicit streams with full 64-row claim and payable tables plus 256 tombstone rows, 1,280 amount rows total, the release-mode scan measured 30,305 ns/op median on an AMD Ryzen 9 7950X; see the implementation plan for the sample details.
+Outstanding explicit-stream liability is derived as `Σ (accrued - Σ claimed_period + Σ payable)` over live streams and tombstones, and f02's balance must cover it. The award path computes it from the streams block already decoded for weight evaluation, avoiding a second state read and a cached scalar that every accrual, claim, fold, removal, and migration must keep synchronized. A due fold's dust is absent from the post-fold liability but remains separately reserved until the actor-layer burn send completes.
 
 ## Quarter-agnostic f02, and the schedule
 
@@ -226,8 +227,7 @@ f02 holds no `EPOCHS_PER_QUARTER` and no quarter logic; quarters, windows, and g
 ## Methods
 
 All FRC-0042 exported, since the callers are contracts (a `method_hash!` variant plus `actor_dispatch!` arm each): `SetWeightRecords`, `StepWeightRecords`, `RegisterStream`, `RemoveStream`, `SetDistribution` (SWA-only, queued under the timelock); `SetShares` (designated writer, not queued); `CancelPending` (SWA-relayed; every op but `StepWeightRecords`); `Claim` (permissionless, batched). `StepWeightRecords` is the gate write: payload-identical to `SetWeightRecords`, a separate method so that cancellability is a static per-op rule; which SWA path calls which is SWA code, not an assertion f02 has to trust. The existing methods keep their numbers and signatures; only `AwardBlockReward`'s internals change.
-
-Parameter and return tuples, under the encoding rules above and reusing the state's component types. Registration supplies only the caller-suppliable subset of a distribution, `DistributionInit { writer, shares }`; f02 constructs the full `ExplicitDistribution` with empty accounting tables at application, so an invalid registration is unrepresentable, and the queue payload captures the subset as received. `CancelPending` names a slot exactly as the queue keys it (id null for schedule-wide ops); a mismatched id/op pair is rejected, not ignored. `Claim` resolves each supplied wallet to ID form before matching; an unresolvable wallet is a zero-entitlement entry. All write methods return nothing.
+Parameter and return tuples, under the encoding rules above and reusing the state's component types. Registration supplies only the caller-suppliable subset of a distribution, `DistributionInit { writer, shares }`; f02 constructs the full `ExplicitDistribution` with empty accounting tables at application, so an invalid registration is unrepresentable, and the queue payload captures the subset as received. `CancelPending` names a slot exactly as the queue keys it (id null for schedule-wide ops); a mismatched id/op pair is rejected, not ignored. `Claim` resolves each supplied wallet to ID form before matching; an unresolvable wallet is a zero-entitlement entry. The configuration methods return nothing.
 
 ```
 SetWeightRecordsParams  { updates: [[id, WeightRecord], ...] }
@@ -279,9 +279,7 @@ Only well-formed calls that have lost an admitted prerequisite are dropped. Payl
 
 Invalid weight records and an invalid aggregate envelope are the recoverable persisted-state exceptions. Due writes are processed from that state, but a write applies only if its resulting records and schedule pass full validation; otherwise it drops. Claims, cancellation, and immediate `SetShares` remain usable. New queued calls reject until repair except for `SetWeightRecords`: admission tolerates the invalid interval before its effective epoch, then requires the captured batch to restore valid records and a valid full-future envelope without stranding any pending call that was still valid. The repair receives the ordinary timelock; it cannot bind early.
 
-The slot key space sets `MAX_PENDING_WRITES = 3 * MAX_STREAMS + 2`: three per-stream operations and two schedule-wide operations.
-
-State bounds: `MAX_RECIPIENTS` caps a share map, `MAX_TOMBSTONE_ROWS` caps aggregate tombstone history and pending-removal reservations, and `Claim` deletes zeroed rows. In normal operation the history terms sit near empty: `payable` fills at the settle and drains as recipients claim, `claimed_period` resets each period, and any `payable` row (live or tombstoned) is flushable by anyone via the permissionless `Claim`. A stream with a larger live payable tail remains claimable but cannot enter removal until enough rows drain below the tombstone reservation bound. These structures exist for edge cases, not the norm; a future iteration with many streams may insert one or more HAMTs to contain them, currently considered overkill.
+Persisted-state validation enforces `|payable ∪ shares| <= MAX_PAYABLE_ROWS_PER_STREAM` for each live stream and caps `claimed_period` at `MAX_RECIPIENTS`. Writer replacement and removal fold the unchanged current map, so the admitted reservation already covers their output. `MAX_TOMBSTONE_ROWS` separately caps tombstones plus pending-removal reservations. Claims remove payable rows, immediately relieving those reservations.
 
 ## Migration
 
