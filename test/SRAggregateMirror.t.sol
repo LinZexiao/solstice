@@ -2,7 +2,7 @@
 pragma solidity ^0.8.36;
 
 // ============================================================================
-// #10 (review): active-quarter aggregate mirror — differential tests
+// Active-quarter aggregate mirror — differential tests
 //   aggregatedFPV reads the O(1) mirror (totalUsd) for the active quarter; these
 //   tests pin the mirror to the linear-scan semantics across post / correct /
 //   freeze / unfreeze / replace / remove, plus the historical-quarter fallback.
@@ -103,7 +103,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         vm.roll(_qPostEnd(0) + 1); // verification window
         _correctVolume(a, 0, _fpv(150e18)); // up
-        _correctVolume(b, 0, 0); // clear (review #7)
+        _correctVolume(b, 0, 0); // clear
 
         vm.roll(_qVerifyEnd(0) + 1);
         assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 150e18);
@@ -150,7 +150,7 @@ contract SRAggregateMirrorTest is SRATestBase {
     }
 
     /// Freeze (posting) then remove: the freeze already excluded the contribution, so the
-    /// removal must not deduct it again (review B1 regression — a second deduction would
+    /// removal must not deduct it again — a second deduction would
     /// underflow the mirror).
     function test_Mirror_FreezeThenRemove_DeductsOnce() public {
         address a = makeAddr("a");
@@ -289,7 +289,7 @@ contract SRAggregateMirrorTest is SRATestBase {
     }
 
     /// correctVolume backfill advancing the quarter must not leak the previous quarter's value
-    /// into the new quarter's counter (review Bug A): the old value is read *after* the advance,
+    /// into the new quarter's counter: the old value is read *after* the advance,
     /// so a backfill with value < oldUsd no longer underflows and value > oldUsd lands exactly.
     function test_Mirror_CorrectVolume_Advance_NoLeak() public {
         address a = makeAddr("a");
@@ -350,7 +350,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(sra.isAdmitted(b), false, "removed after the pending quarter is cleared");
     }
 
-    /// Review S3 root cause: the remove guard's latest-bound determination is *time-driven* (via
+    /// The remove guard's latest-bound determination is *time-driven* (via
     /// _quarterOf), not derived from the activeQ cache — the cache advances only on writes, so a
     /// gap quarter (bound but unwritten) would be missed: q1 bound, nobody wrote, activeQ still 0,
     /// the cache-based guard wrongly reports latest = 0 (already submitted) and lets removal pass.
@@ -425,7 +425,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFPV(2)), 0, "q2 has no contributions");
     }
 
-    /// Review S1: an orchestrator removed before the close of the posting period is excluded —
+    /// An orchestrator removed before the close of the posting period is excluded —
     /// its FPV does not enter AggregatedFPV(Q) (spec §2.2). With activeQ still in its posting
     /// window the removal deducts the contribution from the aggregate (read once the quarter binds).
     function test_Mirror_Remove_InPostingWindow_DeductsAggregate() public {
@@ -444,7 +444,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18, "removed pre-E+POST FPV excluded");
     }
 
-    /// Review S1: once the verification window closes, AggregatedFPV(activeQ) is a fixed binding
+    /// Once the verification window closes, AggregatedFPV(activeQ) is a fixed binding
     /// snapshot (spec §2.2: the read view exposes the bound values directly). A removal after
     /// binding must not rewrite it — only a pre-E+POST removal excludes the contribution. The
     /// former code deducted totalUsd unconditionally, drifting the bound aggregate.
@@ -470,7 +470,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(shares.length, 2, "submitted map stands (removal does not rewrite a submitted map)");
     }
 
-    /// Review S1: a removal in the verification window (E+POST passed, not yet bound) must exclude
+    /// A removal in the verification window (E+POST passed, not yet bound) must exclude
     /// the orchestrator from BOTH the share map (it leaves the admitted list, which submitShares
     /// collects) and the aggregate — otherwise aggregatedFPV(0) = 300 != map sum 100. The former
     /// E+POST boundary (freeze's) left the aggregate at 300 while the map dropped b (probe).
@@ -496,7 +496,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18, "removed FPV excluded -- consistent with map");
     }
 
-    /// Review S3: a gap quarter (no writes, zero volume) submits as an all-zero no-op — the mirror
+    /// A gap quarter (no writes, zero volume) submits as an all-zero no-op — the mirror
     /// jump keeps prevFpv = 0 for it, so submitShares reads zero and the existing map stands.
     function test_GapQuarter_SubmitShares_NoOp() public {
         address a = makeAddr("a");

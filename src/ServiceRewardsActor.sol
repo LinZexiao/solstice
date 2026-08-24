@@ -169,7 +169,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // deployment-time parameter validation, aligned with setPricingParams
         require(priceBand <= BASIS_POINTS, InvalidParameter());
         require(epochsPerQuarter > 0 && postPeriod > 0 && verificationWindow > 0, InvalidParameter());
-        // Review B1: the mirror advances only forward, so the windows must not overlap — a quarter's
+        // The mirror advances only forward, so the windows must not overlap — a quarter's
         // verification window closing after the next quarter has begun would let a governance
         // CorrectVolume target an already-advanced quarter, rewinding activeQ (uint256 intermediate
         // guards the addition against overflow).
@@ -237,7 +237,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      lastSubmittedQ is a q+1 encoding (0 = none), so "awaiting" ⟺ lastSubmittedQ != latest + 1.
     function _pendingSharesQuarter() internal view returns (bool hasPending, uint64 q) {
         SraStorage.SraStorageQuarter storage qt = _quarter();
-        // The latest bound quarter is a *time* property (review S3 root cause): derive it from
+        // The latest bound quarter is a *time* property: derive it from
         // the clock via _quarterOf, not from the activeQ cache — the cache advances only on
         // writes, so a gap quarter (bound but unwritten) would be missed (activeQ still the
         // previous quarter) and removal would wrongly pass. nowQ > 0 guard mirrors the genesis
@@ -255,7 +255,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         return (false, 0);
     }
 
-    /// @dev Quarter containing `nowE`, derived from the clock alone (review S3 root cause):
+    /// @dev Quarter containing `nowE`, derived from the clock alone:
     ///      E(q) = ACTIVATION_EPOCH + q * EPOCHS_PER_QUARTER, so the time quarter is a pure
     ///      function of the epoch. Unlike the activeQ mirror cache (which advances only on
     ///      writes), this never lags: a gap quarter with no volume is still a *time* quarter.
@@ -281,14 +281,14 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      (backing up and clearing a later quarter's contributions — possible when the windows
     ///      overlap, hence also forbidden at the constructor). q > activeQ (skipping one or more
     ///      quarters with no writes) is allowed: a quarter with no volume is necessarily unwritten
-    ///      (postVolume rejects zero, review S3), and _advanceMirror jumps in one step, keeping
+    ///      (postVolume rejects zero), and _advanceMirror jumps in one step, keeping
     ///      prevFpv = activeQ-1's data (0 for a gap quarter). The window checks bound q above
     ///      (can't write the far future); this guard only rejects rewinds.
     function _assertMirrorWindow(SraStorage.SraStorageQuarter storage qt, uint64 q) internal view {
         require(q >= qt.activeQ, InvalidParameter());
     }
 
-    /// @dev Mirror advance (review S3): the first write of a new quarter (postVolume or correctVolume
+    /// @dev Mirror advance: the first write of a new quarter (postVolume or correctVolume
     ///      with q != activeQ) backs the previous active-quarter contributions up into the previous-
     ///      quarter mirror — exclusion-fixed (frozenAtPostEnd ? 0 : fpv), because the freeze state
     ///      of the previous quarter's E+POST is no longer derivable once the quarter has advanced —
@@ -357,8 +357,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
         SraStorage.SraStorageQuarter storage qt = _quarter();
 
-        // Time-correct the mirror cache first (a gap quarter advances on the clock, not on writes
-        // — review S3 root cause), then validate the write target against the corrected cache.
+        // Time-correct the mirror cache first (a gap quarter advances on the clock, not on
+        // writes), then validate the write target against the corrected cache.
         _syncMirror(qt);
         _assertMirrorWindow(qt, q);
         if (qt.activeQ != q) _advanceMirror(qt, q);
@@ -419,7 +419,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // the aggregate is a binding snapshot (the read view exposes the bound values directly) and
         // a later removal must not rewrite it. The boundary is binding (not E+POST — freeze's
         // boundary): unlike freeze, removal drops the orchestrator from the admitted list, so the
-        // map and the aggregate must exclude it together for every pre-binding removal (review S1).
+        // map and the aggregate must exclude it together for every pre-binding removal.
         uint64 q = _quarter().activeQ;
         if (!_afterBinding(q) && !o.frozenAtPostEnd && FixedU18.unwrap(o.fpv) > 0) {
             _quarter().totalUsd[q] = _quarter().totalUsd[q] - o.fpv;
@@ -576,8 +576,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
         SraStorage.SraStorageQuarter storage qt = _quarter();
 
-        // Time-correct the mirror cache first (gap quarters advance on the clock — review S3
-        // root cause), then validate the write target against the corrected cache. correctVolume
+        // Time-correct the mirror cache first (gap quarters advance on the clock), then
+        // validate the write target against the corrected cache. correctVolume
         // can be the first writer of a quarter (supplying recomputed figures for a quarter nobody
         // posted); the advance backs the previous quarter's data up into prevFpv.
         _syncMirror(qt);

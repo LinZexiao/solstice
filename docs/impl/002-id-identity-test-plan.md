@@ -24,8 +24,8 @@
 ## 3. 关键 slot / 常量（测试侧需要）
 
 ```solidity
-// REGISTRY_SLOT：src/lib/SraStorage.sol:69 已有，值 0xb7fd4b054ced95f43476af93bf71636318271f9e64f7661dc52f0fb4c1a54400（namespace 不变）
-// 但新基线 test/ 下无此常量（早期实现 在 SRARegistry.t.sol:20 定义）——新增测试需自行定义：
+// REGISTRY_SLOT：src/lib/SraStorage.sol 已有，值 0xb7fd4b054ced95f43476af93bf71636318271f9e64f7661dc52f0fb4c1a54400（namespace 不变）
+// 但新基线 test/ 下无此常量（早期实现 在 SRARegistry.t.sol 定义）——新增测试需自行定义：
 bytes32 internal constant REGISTRY_SLOT = 0xb7fd4b054ced95f43476af93bf71636318271f9e64f7661dc52f0fb4c1a54400;
 ```
 
@@ -39,7 +39,7 @@ bytes32 internal constant REGISTRY_SLOT = 0xb7fd4b054ced95f43476af93bf7163631827
 
 ## 4. 新增 5 个行为锁定测试（移植早期实现）
 
-helper 全部复用新基线 `SRATestBase.sol`（`_admit/_postAs/_rollTo/_qEnd/_qPostEnd/_qVerifyEnd/_correctVolume/_fpv/_pair/_registerPairsAs`）+ `SRAShares.t.sol` 内部（`_admitAndPost:267`、`_walletShare:280`、`_sumShares:274`）。早期实现 测试几乎原样可移植。
+helper 全部复用新基线 `SRATestBase.sol`（`_admit/_postAs/_rollTo/_qEnd/_qPostEnd/_qVerifyEnd/_correctVolume/_fpv/_pair/_registerPairsAs`）+ `SRAShares.t.sol` 内部（`SRAShares::_admitAndPost`、`SRAShares::_walletShare`、`SRAShares::_sumShares`）。早期实现 测试几乎原样可移植。
 
 ### 4.1 新增测试清单
 

@@ -4,7 +4,7 @@ pragma solidity ^0.8.36;
 // ============================================================================
 // Overflow DoS regression tests — V3 (TDD Red phase, audit findings)
 //
-// Background: the SRA audit (PR #24 review, probe-verified) found 3 overflow-DoS
+// Background: the SRA audit (PR #24, probe-verified) found 3 overflow-DoS
 // vulnerabilities sharing one root cause: the FPV input fields had no
 // business-domain upper-bound validation.
 //

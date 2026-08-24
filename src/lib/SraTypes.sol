@@ -18,7 +18,7 @@ struct Pair {
 /// @notice Quarterly FPV: a single USD-denominated total (FIP-0118 §2.3, FIPs#1275: FIL→USD conversion moved
 ///         off-chain, so the SRA no longer stores pricing periods). `usd` is the face-USD stablecoin volume plus
 ///         the off-chain-converted FIL volume; `usd == 0` means not posted
-///         (PostVolume rejects zero, CorrectVolume(0) clears; per review #7).
+///         (PostVolume rejects zero, CorrectVolume(0) clears).
 /// @dev FixedU18: 18-decimal fixed-point USD (1 USD = 1e18 integer). Adopted per the SWA interface
 ///      (IServiceRewardsActor.aggregatedFPV returns FixedU18) so every USD-consuming computation is
 ///      type-safe against integer/fixed-point mixing (1 vs 1e18 magnitude errors). MAX_FPV_USD(1e30)

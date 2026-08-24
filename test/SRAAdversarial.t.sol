@@ -332,12 +332,12 @@ contract SRAAdversarial is SRATestBase {
     // ------------------------------------------------------------------------
 
     // ------------------------------------------------------------------------
-    // Review B1: mirror-advance direction guard + window-overlap constructor constraint
+    // Mirror-advance direction guard + window-overlap constructor constraint
     // ------------------------------------------------------------------------
 
     /// Constructor rejects window overlap: a quarter's verification window must close before the
     /// next quarter begins (POST + VERIFY <= EPOCHS), otherwise a governance CorrectVolume could
-    /// target an already-advanced quarter and rewind the mirror (review B1).
+    /// target an already-advanced quarter and rewind the mirror.
     function test_Ctor_WindowOverlap_Rejected() public {
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
         new ServiceRewardsActor(
@@ -372,8 +372,8 @@ contract SRAAdversarial is SRATestBase {
 
     /// A write must target the active or the next quarter: skipping a quarter (q > activeQ + 1)
     /// would misalign the prevFpv mirror (it can only hold activeQ - 1's data) — rejected by the
-    /// mirror-window guard (review B1).
-    /// Review S3: a write may skip a gap quarter (a quarter with no volume is necessarily
+    /// mirror-window guard.
+    /// A write may skip a gap quarter (a quarter with no volume is necessarily
     /// unwritten — postVolume rejects zero). The mirror jumps in one step, keeping prevFpv =
     /// activeQ-1's data (0 for a gap). Formerly rejected (deadlock: no way to advance past a
     /// no-volume quarter).
@@ -387,7 +387,7 @@ contract SRAAdversarial is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(1, orch).usd), 0, "gap quarter has no contribution (prevFpv = 0)");
     }
 
-    /// Review S3: the governance path skips gap quarters the same way (CorrectVolume in Q2's
+    /// The governance path skips gap quarters the same way (CorrectVolume in Q2's
     /// verification window succeeds; Q1 was unwritten).
     function test_CorrectVolume_SkipsGapQuarter() public {
         address orch = makeAddr("orch");
@@ -398,7 +398,7 @@ contract SRAAdversarial is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(2, orch).usd), 100e18, "governance write skips the gap quarter");
     }
 
-    /// Review S3 regression: a no-volume quarter must not deadlock the system — q0 has volume,
+    /// A no-volume quarter must not deadlock the system — q0 has volume,
     /// q1 is a gap, q2 must still accept writes (previously reverted InvalidParameter forever).
     function test_GapQuarter_NoDeadlock() public {
         address a = makeAddr("a");
@@ -411,7 +411,7 @@ contract SRAAdversarial is SRATestBase {
 
         // Q1: nobody writes (all SPs have zero volume) — the gap.
         vm.roll(_qEnd(2) + 1); // Q2 posting window
-        _postAs(b, 2, _fpv(50e18)); // must succeed (review S3: previously InvalidParameter)
+        _postAs(b, 2, _fpv(50e18)); // must succeed (previously InvalidParameter)
         assertEq(FixedU18.unwrap(sra.fpvOf(2, b).usd), 50e18, "post-gap write succeeds");
         assertEq(FixedU18.unwrap(sra.fpvOf(1, a).usd), 0, "gap quarter: prevFpv zero for q0's contributor");
         assertEq(FixedU18.unwrap(sra.fpvOf(1, b).usd), 0, "gap quarter: prevFpv zero for the new writer too");
