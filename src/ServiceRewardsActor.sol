@@ -126,6 +126,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     error NotAdmitted(address orch);
     error AlreadyAdmitted(address orch);
     error NotFrozen(address orch);
+    error Frozen(address orch);
     error AlreadyFrozen(address orch);
     error AtCapacity();
     error AlreadyBound(bytes32 pairId);
@@ -319,7 +320,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = r.activeIdOf[msg.sender];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(msg.sender));
-        require(o.frozenSince == Epoch.wrap(0), NotFrozen(msg.sender));
+        require(o.frozenSince == Epoch.wrap(0), Frozen(msg.sender));
 
         for (uint256 i = 0; i < pairs.length; i++) {
             bytes32 pairId = _pairId(pairs[i].payer, pairs[i].operator);
@@ -343,7 +344,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = r.activeIdOf[msg.sender];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(msg.sender));
-        require(o.frozenSince == Epoch.wrap(0), NotFrozen(msg.sender));
+        require(o.frozenSince == Epoch.wrap(0), Frozen(msg.sender));
         require(_inPostingWindow(q), NotInPostingWindow(q));
 
         // The single USD total is the only on-chain input that feeds _computeShares;
@@ -566,7 +567,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // re-admit a suspended orchestrator — otherwise a freeze → correctVolume → advance sequence
         // clears frozenAtPostEnd and the frozen orchestrator obtains shares in the next quarter.
         SraStorage.OrchestratorInfo storage o = _registry().orchestrators[id];
-        require(o.frozenSince == Epoch.wrap(0), NotFrozen(orch));
+        require(o.frozenSince == Epoch.wrap(0), Frozen(orch));
 
         // Same business-domain bound as postVolume (governance path into the same FPV storage).
         require(value <= MAX_FPV_USD, InvalidParameter());

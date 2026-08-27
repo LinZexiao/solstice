@@ -117,7 +117,7 @@ contract SRARegistryTest is SRATestBase {
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
 
         vm.prank(orch);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.Frozen.selector, orch));
         sra.registerPairs(pairs);
     }
 
@@ -213,7 +213,7 @@ contract SRARegistryTest is SRATestBase {
 
         vm.roll(_qEnd(0) + 1); // posting period
         vm.prank(orch);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.Frozen.selector, orch));
         sra.postVolume(0, FixedU18.wrap(_fpv(100e18)));
     }
 
@@ -233,15 +233,15 @@ contract SRARegistryTest is SRATestBase {
         _postAs(b, 0, _fpv(200e18));
         _freeze(b); // posting window: b excluded from q0 (frozenAtPostEnd)
 
-        // verification window: correcting a frozen orchestrator must revert NotFrozen —
+        // verification window: correcting a frozen orchestrator must revert Frozen —
         // the governance path must not re-admit a suspended orchestrator (unanimousNoHold:
         // vote 1 approves, vote 2 executes the body where the gate fires)
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
         sra.correctVolume(b, 0, FixedU18.wrap(_fpv(150e18))); // vote 1 (approve only)
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.Frozen.selector, b));
         vm.prank(owner2);
-        sra.correctVolume(b, 0, FixedU18.wrap(_fpv(150e18))); // vote 2 executes body -> NotFrozen
+        sra.correctVolume(b, 0, FixedU18.wrap(_fpv(150e18))); // vote 2 executes body -> Frozen
         assertEq(FixedU18.unwrap(sra.fpvOf(0, b).usd), 200e18, "frozen b's fpv untouched");
 
         // unfreeze restores the governance correction path (fresh calldata -> fresh task)
