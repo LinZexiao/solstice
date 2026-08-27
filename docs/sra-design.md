@@ -104,7 +104,7 @@ Used throughout this document:
 
 | Method | Signature | One-line semantics |
 |--------|-----------|--------------------|
-| `aggregatedFPV` | `aggregatedFPV(uint64 Q) returns (FixedU18 usd)` | Returns the post-binding USD aggregate (18-decimal fixed point, matching the SWA interface `IServiceRewardsActor`): Σ of each non-excluded posted orchestrator's bound USD value. **Pure view** — the FIL→USD conversion is off-chain (FIPs#1275), so there is no on-chain finalize to trigger (📄 §3.2/§4.2). **O(1) for every quarter via the quarter-counter array** (`totalUsd[Q]`, review #10 refactor): the active quarter reads the maintained counter; historical quarters read the binding-fixed snapshot (spec determinism — the registry is constant within a quarter, so the aggregate cannot drift with later remove/replace) |
+| `aggregatedFPV` | `aggregatedFPV(uint64 Q) returns (FixedU18 usd)` | Returns the post-binding USD aggregate (18-decimal fixed point, matching the SWA interface `IServiceRewardsActor`): Σ of each non-excluded posted orchestrator's bound USD value. **Pure view** — the FIL→USD conversion is off-chain (FIPs#1275), so there is no on-chain finalize to trigger (📄 §3.2/§4.2). **O(1) for every quarter via the quarter-counter array** (`totalUsd[Q]`): the active quarter reads the maintained counter; historical quarters read the binding-fixed snapshot (spec determinism — the registry is constant within a quarter, so the aggregate cannot drift with later remove/replace) |
 
 > **Contract declaration (FIPs#1275)**: `AggregatedFPV` reads only bound USD values — the spec's "reading AggregatedFPV triggers FinalizeConversion" clause was removed with the off-chain conversion. Reverts `NotBound(q)` before binding — distinguishing "quarter not yet bound" (call too early; the SWA does not need to re-enforce the check) from "quarter with zero declared volume" (legitimately returns 0). Locked by `test/SRAIntegration.t.sol` (§4.3.6, scenarios C1-C3).
 
@@ -163,9 +163,9 @@ struct FPV {
                     // 18-decimal fixed point (1 USD = 1e18) — adopted per the SWA interface
                     // (IServiceRewardsActor.aggregatedFPV returns FixedU18) so every USD-consuming
                     // computation is type-safe against integer/fixed-point magnitude mixing.
-                    // One storage slot. usd == 0 means "not posted" (review #7: PostVolume
+                    // One storage slot. usd == 0 means "not posted" (PostVolume
                     // rejects zero; CorrectVolume(0) clears).
-                    // MAX_FPV_USD(1e30) wraps as 1e48 < uint256.max — no narrowing at the write.
+                    // MAX_FPV_USD(1e30) — downstream product usd × 1e18 ≤ 1e48 < uint256.max, no overflow.
 }
 struct SRAStorageQuarter {
     uint64 activeQ;            // the quarter the mirror has advanced to (postVolume/correctVolume set it
@@ -181,7 +181,7 @@ struct SRAStorageQuarter {
 }
 ```
 
-> The mirror refactor (review #10, three-piece design) removed the per-quarter `fpv` map (`mapping(Q => mapping(orch => FPV))`), the `sharesSubmitted` map, and the former `mirrorActive/mirrorQ/totalUsd` fields. Per-orchestrator values are retained only for the active and the previous quarter (`fpv`/`prevFpv` slots) — historical per-orchestrator reads (`fpvOf(Q, orch)`) return 0 for earlier quarters, which the spec does not require (read state exposes only `AggregatedFPV`, 📄 §5 "Read state").
+> The mirror refactor (three-piece design) removed the per-quarter `fpv` map (`mapping(Q => mapping(orch => FPV))`), the `sharesSubmitted` map, and the former `mirrorActive/mirrorQ/totalUsd` fields. Per-orchestrator values are retained only for the active and the previous quarter (`fpv`/`prevFpv` slots) — historical per-orchestrator reads (`fpvOf(Q, orch)`) return 0 for earlier quarters, which the spec does not require (read state exposes only `AggregatedFPV`, 📄 §5 "Read state").
 
 > FIPs#1275 removed the FIL pricing-period vector (`PricePeriod[]`) and the on-chain `FinalizeConversion`: the SRA never receives raw FIL amounts, pricing periods, or print references — `PostVolume` carries only the single USD total (📄 §2.3/§4.2). The PRICE_BAND anchor storage (C6) is likewise gone.
 
@@ -231,7 +231,9 @@ submitShares(Q):
     2. q is the latest bound quarter: q == activeQ (bound, mirror not advanced) or q == activeQ - 1
        (advanced). Read the mirror slots: fpv for the active quarter (skip frozenAtPostEnd),
        prevFpv for the previous quarter (exclusion already fixed at the advance)
-    3. total = totalUsd[q]   // quarter counter, O(1)
+    3. total = Σ collected share_i   // sum over the collected entries (current admitted ids) — the
+       // quarter counter (totalUsd) is a binding snapshot that can outlive a lag-window remove, so
+       // it must not drive the largest-remainder split (aggregatedFPV keeps the counter, O(1))
     4. if total == 0: benign no-op — mark submitted and return (no SetShares; existing map stands, 🔍 D1/FIPs#1275)
        else:
          for i: share_i = usd_i * SHARE_TOTAL / total      // floor
@@ -288,6 +290,14 @@ submitShares(Q):
 | `MAX_ORCHESTRATORS` (64) | Compile-time constant | 📘 PR #13 MAX_RECIPIENTS; 🔍 D2 |
 | `MIN_LOT` / `PRICE_BAND` | **Governable** (SRA Governance, updated under SRA_CANCEL_HOLD) | 📄 §3.3/§5.2 "all are SRA state, settable by SRA Governance"; authoritative for the off-chain indexer (FIPs#1275) — no on-chain computation |
 | `ACTIVATION_EPOCH` | Constructor config | 📄 §3.2 quarter-window start |
+
+**Strict window constraint (load-bearing)**: the constructor requires
+`POST_PERIOD + VERIFICATION_WINDOW < EPOCHS_PER_QUARTER`. The mirror advances only forward, so an
+equality (`POST + VERIFY == EPOCHS`) would leave the verification window's last epoch inside the
+next quarter's mirror window — an off-by-one dead zone where a write targets a quarter the mirror
+has already advanced past. With the strict inequality, any write in a posting/verification window
+targets the current time quarter (`window ⟹ nowQ == q`), which is what made the mirror-advance
+guard (`_assertMirrorWindow`) and its write-path checks redundant (removed).
 
 ## 3. Decision Record
 
@@ -483,7 +493,7 @@ submitShares(Q):
 | `test/SRAGovernance.t.sol` | Governance flow | 16 | 6 |
 | `test/SRARegistry.t.sol` | Orchestrator registry + freeze + cap | 28 | 3, 5 |
 | `test/SRAQuarter.t.sol` | Quarter state machine + FPV (single USD total, FIPs#1275) | 22 | 2, 7, 11 |
-| `test/SRAggregateMirror.t.sol` | **Aggregate mirror differential tests** (review #10 refactor): mirror pinned to the linear-scan semantics across post / correct / freeze / unfreeze / replace (inheritance) / remove + quarter advance / lagging submit (prevFpv) / exclusion-fixed mirror + historical quarter counter | 9 | 14 (aggregate path) |
+| `test/SRAggregateMirror.t.sol` | **Aggregate mirror differential tests**: mirror pinned to the linear-scan semantics across post / correct / freeze / unfreeze / replace (inheritance) / remove + quarter advance / lagging submit (prevFpv) / exclusion-fixed mirror + historical quarter counter | 9 | 14 (aggregate path) |
 | `test/SRAShares.t.sol` | Share computation + no-op + freeze snapshot + SetShares | 17 | 1, 3, 4, 10, 12 |
 | `test/SRAIntegration.t.sol` | **Integration contract tests** (simulate the SWA gating consumer of aggregatedFPV; pure-view no-divergence, FIPs#1275) | 3 | 11 |
 | `test/SRAOverflowDoS.t.sol` | **Overflow DoS regression tests** (audit V3 — _computeShares overflow; V1/V2 removed with the band/finalize machinery, FIPs#1275) | 2 | 11 (overflow-DoS hardening) |
@@ -562,7 +572,7 @@ submitShares(Q):
 | **CV4** | `admit` AlreadyAdmitted (346) | `SRARegistry` `test_Admit_AlreadyAdmitted_Reverts` | re-admitting the same address rejected (G2 only tested AtCapacity full) |
 | **CV5** | `freeze`/`unfreeze` four-way failure branches (371/372/381/382) | `SRARegistry` `test_Freeze_NotAdmitted_Reverts` / `test_Freeze_AlreadyFrozen_Reverts`<br>`test_Unfreeze_NotAdmitted_Reverts` / `test_Unfreeze_NotFrozen_Reverts` | NotAdmitted / AlreadyFrozen / NotFrozen gating failure paths |
 | **CV6** | `replace` NotAdmitted(oldOrch) (396) | `SRARegistry` `test_Replace_OldNotAdmitted_Reverts` | old address not admitted rejected (G6 only tested the target-already-admitted reverse branch) |
-| **CV7** | `aggregatedFPV` unposted continue / `orchestratorCount` never called | `SRAQuarter` `test_AggregatedFPV_UnpostedOrch_Excluded`<br>`SRARegistry` `test_OrchestratorCount_ReflectsAdmissions` | skip when some orchestrators did not post (usd==0 continue, review #7); read-only view count consistent with admittedList.length (review #1) |
+| **CV7** | `aggregatedFPV` unposted continue / `orchestratorCount` never called | `SRAQuarter` `test_AggregatedFPV_UnpostedOrch_Excluded`<br>`SRARegistry` `test_OrchestratorCount_ReflectsAdmissions` | skip when some orchestrators did not post (usd==0 continue); read-only view count consistent with admittedList.length |
 
 **Implementation issue found**: no implementation defect was found during the closure (all new tests went Green directly, verifying existing behavior). Also fixed in passing the P1-leftover fmt difference in `test/SRAInvariant.t.sol` (`forge fmt`, not a semantic change), keeping the whole repo's `forge fmt --check` clean.
 

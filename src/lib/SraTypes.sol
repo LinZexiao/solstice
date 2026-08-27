@@ -22,7 +22,7 @@ struct Pair {
 /// @dev FixedU18: 18-decimal fixed-point USD (1 USD = 1e18 integer). Adopted per the SWA interface
 ///      (IServiceRewardsActor.aggregatedFPV returns FixedU18) so every USD-consuming computation is
 ///      type-safe against integer/fixed-point mixing (1 vs 1e18 magnitude errors). MAX_FPV_USD(1e30)
-///      wraps as 1e48 < uint256.max — no narrowing at the storage write. One storage slot.
+///      keeps the downstream product usd × 1e18 ≤ 1e48 < uint256.max — no overflow in the share math. One storage slot.
 struct FPV {
     FixedU18 usd; // single USD total for the quarter (FPV_i(Q)), 18-decimal fixed point; 0 = not posted
 }
