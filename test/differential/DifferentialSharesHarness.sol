@@ -2,6 +2,7 @@
 pragma solidity ^0.8.36;
 
 import {ServiceRewardsActor, Share} from "../../src/ServiceRewardsActor.sol";
+import {Epoch} from "../../src/lib/Epoch.sol";
 import {FixedU18} from "../../src/lib/FixedU18.sol";
 
 /// @dev Differential test harness: inherits ServiceRewardsActor, exposing the internal
@@ -23,7 +24,15 @@ contract DifferentialSharesHarness is ServiceRewardsActor {
         uint256 priceBand
     )
         ServiceRewardsActor(
-            o1, o2, epochsPerQuarter, postPeriod, verificationWindow, cancelHold, activationEpoch, minLot, priceBand
+            o1,
+            o2,
+            Epoch.wrap(epochsPerQuarter),
+            Epoch.wrap(postPeriod),
+            Epoch.wrap(verificationWindow),
+            Epoch.wrap(cancelHold),
+            Epoch.wrap(activationEpoch),
+            minLot,
+            priceBand
         )
     {}
 

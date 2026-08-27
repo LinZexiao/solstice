@@ -153,11 +153,11 @@ contract ServiceRewardsActor is UnanimousGovernance {
     constructor(
         address owner1,
         address owner2,
-        uint64 epochsPerQuarter,
-        uint64 postPeriod,
-        uint64 verificationWindow,
-        uint64 cancelHold,
-        uint64 activationEpoch,
+        Epoch epochsPerQuarter,
+        Epoch postPeriod,
+        Epoch verificationWindow,
+        Epoch cancelHold,
+        Epoch activationEpoch,
         uint256 minLot,
         uint256 priceBand
     ) {
@@ -168,19 +168,26 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
         // deployment-time parameter validation, aligned with setPricingParams
         require(priceBand <= BASIS_POINTS, InvalidParameter());
-        require(epochsPerQuarter > 0 && postPeriod > 0 && verificationWindow > 0, InvalidParameter());
+        require(
+            Epoch.unwrap(epochsPerQuarter) > 0 && Epoch.unwrap(postPeriod) > 0 && Epoch.unwrap(verificationWindow) > 0,
+            InvalidParameter()
+        );
         // The mirror advances only forward, so the verification window must close strictly before
         // the next quarter begins — POST + VERIFY == EPOCHS would leave the window's last epoch
         // inside the next quarter's mirror window (off-by-one dead zone: a write in that epoch
         // would target a quarter the mirror has already advanced past). uint256 intermediate
         // guards the addition against overflow.
-        require(uint256(postPeriod) + uint256(verificationWindow) < uint256(epochsPerQuarter), InvalidParameter());
+        require(
+            uint256(Epoch.unwrap(postPeriod)) + uint256(Epoch.unwrap(verificationWindow))
+                < uint256(Epoch.unwrap(epochsPerQuarter)),
+            InvalidParameter()
+        );
 
-        EPOCHS_PER_QUARTER = Epoch.wrap(epochsPerQuarter);
-        POST_PERIOD = Epoch.wrap(postPeriod);
-        VERIFICATION_WINDOW = Epoch.wrap(verificationWindow);
-        SRA_CANCEL_HOLD = Epoch.wrap(cancelHold);
-        ACTIVATION_EPOCH = Epoch.wrap(activationEpoch);
+        EPOCHS_PER_QUARTER = epochsPerQuarter;
+        POST_PERIOD = postPeriod;
+        VERIFICATION_WINDOW = verificationWindow;
+        SRA_CANCEL_HOLD = cancelHold;
+        ACTIVATION_EPOCH = activationEpoch;
 
         SraStorage.SraStorageParams storage p = _params();
         p.minLot = minLot;

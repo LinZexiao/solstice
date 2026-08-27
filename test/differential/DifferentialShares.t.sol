@@ -12,6 +12,7 @@ pragma solidity ^0.8.36;
 // ============================================================================
 
 import {ServiceRewardsActor, Share} from "../../src/ServiceRewardsActor.sol";
+import {Epoch} from "../../src/lib/Epoch.sol";
 import {SRATestBase} from "../SRATestBase.sol";
 import {FixedU18} from "../../src/lib/FixedU18.sol";
 import {DifferentialCases} from "./DifferentialCases.sol";
@@ -146,11 +147,11 @@ contract DifferentialSharesTest is SRATestBase {
         s = new ServiceRewardsActor(
             owner1,
             owner2,
-            EPOCHS_PER_QUARTER,
-            POST_PERIOD,
-            VERIFICATION_WINDOW,
-            SRA_CANCEL_HOLD,
-            ACTIVATION_EPOCH,
+            Epoch.wrap(EPOCHS_PER_QUARTER),
+            Epoch.wrap(POST_PERIOD),
+            Epoch.wrap(VERIFICATION_WINDOW),
+            Epoch.wrap(SRA_CANCEL_HOLD),
+            Epoch.wrap(ACTIVATION_EPOCH),
             MIN_LOT,
             PRICE_BAND
         );

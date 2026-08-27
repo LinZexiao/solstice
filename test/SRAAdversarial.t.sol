@@ -24,6 +24,7 @@ pragma solidity ^0.8.36;
 
 import {Share} from "../src/lib/FVMRewardTypes.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
+import {Epoch} from "../src/lib/Epoch.sol";
 import {Pair} from "../src/lib/SraTypes.sol";
 import {IsASafe} from "../src/lib/IsASafe.sol";
 import {SRATestBase} from "./SRATestBase.sol";
@@ -113,11 +114,11 @@ contract SRAAdversarial is SRATestBase {
         ServiceRewardsActor big = new ServiceRewardsActor(
             owner1,
             owner2,
-            1 << 40, // EPOCHS_PER_QUARTER: uint64.max × 2^40 ≈ 2^104 > 2^64
-            POST_PERIOD,
-            VERIFICATION_WINDOW,
-            SRA_CANCEL_HOLD,
-            ACTIVATION_EPOCH,
+            Epoch.wrap(1 << 40), // EPOCHS_PER_QUARTER: uint64.max × 2^40 ≈ 2^104 > 2^64
+            Epoch.wrap(POST_PERIOD),
+            Epoch.wrap(VERIFICATION_WINDOW),
+            Epoch.wrap(SRA_CANCEL_HOLD),
+            Epoch.wrap(ACTIVATION_EPOCH),
             MIN_LOT,
             PRICE_BAND
         );
@@ -343,11 +344,11 @@ contract SRAAdversarial is SRATestBase {
         new ServiceRewardsActor(
             owner1,
             owner2,
-            500, // EPOCHS
-            300, // POST
-            400, // VERIFY: 300 + 400 = 700 > 500 -> overlap
-            SRA_CANCEL_HOLD,
-            ACTIVATION_EPOCH,
+            Epoch.wrap(500), // EPOCHS
+            Epoch.wrap(300), // POST
+            Epoch.wrap(400), // VERIFY: 300 + 400 = 700 > 500 -> overlap
+            Epoch.wrap(SRA_CANCEL_HOLD),
+            Epoch.wrap(ACTIVATION_EPOCH),
             MIN_LOT,
             PRICE_BAND
         );
@@ -361,11 +362,11 @@ contract SRAAdversarial is SRATestBase {
         new ServiceRewardsActor(
             owner1,
             owner2,
-            700, // EPOCHS
-            300, // POST
-            400, // VERIFY: 300 + 400 = 700 == EPOCHS -> rejected (strict)
-            SRA_CANCEL_HOLD,
-            ACTIVATION_EPOCH,
+            Epoch.wrap(700), // EPOCHS
+            Epoch.wrap(300), // POST
+            Epoch.wrap(400), // VERIFY: 300 + 400 = 700 == EPOCHS -> rejected (strict)
+            Epoch.wrap(SRA_CANCEL_HOLD),
+            Epoch.wrap(ACTIVATION_EPOCH),
             MIN_LOT,
             PRICE_BAND
         );

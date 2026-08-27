@@ -2,6 +2,7 @@
 pragma solidity ^0.8.36;
 
 import {ServiceRewardsActor} from "../../src/ServiceRewardsActor.sol";
+import {Epoch} from "../../src/lib/Epoch.sol";
 
 /// @dev Halmos symbolic-verification harness: inherits ServiceRewardsActor, exposing the internal quarter-window
 ///      determination functions via public wrappers (_qEnd/_inPostingWindow/_inVerificationWindow/_afterBinding).
@@ -22,11 +23,11 @@ contract QuarterWindowHarness is ServiceRewardsActor {
         ServiceRewardsActor(
             owner1,
             owner2,
-            uint64(1000), // epochsPerQuarter
-            uint64(300), // postPeriod
-            uint64(400), // verificationWindow
-            uint64(100), // cancelHold
-            uint64(100_000), // activationEpoch
+            Epoch.wrap(1000), // epochsPerQuarter
+            Epoch.wrap(300), // postPeriod
+            Epoch.wrap(400), // verificationWindow
+            Epoch.wrap(100), // cancelHold
+            Epoch.wrap(100_000), // activationEpoch
             1e18, // minLot
             2000 // priceBand (20%, basis points)
         )

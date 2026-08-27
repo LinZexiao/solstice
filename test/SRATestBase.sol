@@ -62,11 +62,11 @@ contract SRATestBase is MockRewardTest {
         sra = new ServiceRewardsActor(
             owner1,
             owner2,
-            EPOCHS_PER_QUARTER,
-            POST_PERIOD,
-            VERIFICATION_WINDOW,
-            SRA_CANCEL_HOLD,
-            ACTIVATION_EPOCH,
+            Epoch.wrap(EPOCHS_PER_QUARTER),
+            Epoch.wrap(POST_PERIOD),
+            Epoch.wrap(VERIFICATION_WINDOW),
+            Epoch.wrap(SRA_CANCEL_HOLD),
+            Epoch.wrap(ACTIVATION_EPOCH),
             MIN_LOT,
             PRICE_BAND
         );

@@ -15,6 +15,7 @@ pragma solidity ^0.8.36;
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
+import {Epoch} from "../src/lib/Epoch.sol";
 import {FPV} from "../src/lib/SraTypes.sol";
 import {UnanimousGovernance} from "../src/lib/UnanimousGovernance.sol";
 import {IsASafe} from "../src/lib/IsASafe.sol";
@@ -277,11 +278,11 @@ contract SRAGovernanceTest is SRATestBase {
         new ServiceRewardsActor(
             owner1,
             owner2,
-            EPOCHS_PER_QUARTER,
-            POST_PERIOD,
-            VERIFICATION_WINDOW,
-            SRA_CANCEL_HOLD,
-            ACTIVATION_EPOCH,
+            Epoch.wrap(EPOCHS_PER_QUARTER),
+            Epoch.wrap(POST_PERIOD),
+            Epoch.wrap(VERIFICATION_WINDOW),
+            Epoch.wrap(SRA_CANCEL_HOLD),
+            Epoch.wrap(ACTIVATION_EPOCH),
             MIN_LOT,
             10001
         );
@@ -289,7 +290,15 @@ contract SRAGovernanceTest is SRATestBase {
         // epochsPerQuarter == 0
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
         new ServiceRewardsActor(
-            owner1, owner2, 0, POST_PERIOD, VERIFICATION_WINDOW, SRA_CANCEL_HOLD, ACTIVATION_EPOCH, MIN_LOT, PRICE_BAND
+            owner1,
+            owner2,
+            Epoch.wrap(0),
+            Epoch.wrap(POST_PERIOD),
+            Epoch.wrap(VERIFICATION_WINDOW),
+            Epoch.wrap(SRA_CANCEL_HOLD),
+            Epoch.wrap(ACTIVATION_EPOCH),
+            MIN_LOT,
+            PRICE_BAND
         );
     }
 
