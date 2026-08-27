@@ -418,7 +418,7 @@ contract SRAAdversarial is SRATestBase {
 
     function _sumShares(Share[] memory shares) internal pure returns (uint256 sum) {
         for (uint256 i = 0; i < shares.length; i++) {
-            sum += shares[i].share;
+            sum += FixedU18.unwrap(shares[i].share);
         }
     }
 }

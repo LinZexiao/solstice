@@ -52,7 +52,7 @@ contract DifferentialSharesTest is SRATestBase {
 
             assertEq(shares.length, cases[i].expected.length, _msg("share", i, "length"));
             for (uint256 j = 0; j < shares.length; j++) {
-                assertEq(shares[j].share, cases[i].expected[j], _msg("share", i, "value"));
+                assertEq(FixedU18.unwrap(shares[j].share), cases[i].expected[j], _msg("share", i, "value"));
             }
         }
     }

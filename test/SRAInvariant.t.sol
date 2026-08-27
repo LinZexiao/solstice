@@ -618,7 +618,7 @@ contract SRAInvariantTest is Test {
         if (shares.length == 0) return;
         uint256 sum;
         for (uint256 i = 0; i < shares.length; i++) {
-            sum += shares[i].share;
+            sum += FixedU18.unwrap(shares[i].share);
         }
         assertEq(sum, 1e18, "I1: sum of shares must equal SHARE_TOTAL");
     }
@@ -711,7 +711,7 @@ contract SRAInvariantTest is Test {
             assertGt(shares.length, 0, "A3: non-zero total must produce at least one share");
             assertLe(shares.length, count, "A3: share count must not exceed active orchestrator count");
             for (uint256 i = 0; i < shares.length; i++) {
-                assertGt(shares[i].share, 0, "A3: trimmed map must contain only non-zero shares");
+                assertGt(FixedU18.unwrap(shares[i].share), 0, "A3: trimmed map must contain only non-zero shares");
             }
         }
     }

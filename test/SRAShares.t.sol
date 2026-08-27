@@ -41,8 +41,8 @@ contract SRASharesTest is SRATestBase {
         assertEq(_sumShares(shares), 1e18);
         // split fairness: each share ∈ {333333333333333333, 333333333333333334}
         for (uint256 i = 0; i < shares.length; i++) {
-            assertGe(shares[i].share, 333_333_333_333_333_333);
-            assertLe(shares[i].share, 333_333_333_333_333_334);
+            assertGe(FixedU18.unwrap(shares[i].share), 333_333_333_333_333_333);
+            assertLe(FixedU18.unwrap(shares[i].share), 333_333_333_333_333_334);
         }
         assertEq(_walletShare(shares, a) + _walletShare(shares, b) + _walletShare(shares, c), 1e18);
     }
@@ -61,8 +61,8 @@ contract SRASharesTest is SRATestBase {
         assertEq(shares.length, 7);
         assertEq(_sumShares(shares), 1e18);
         for (uint256 i = 0; i < shares.length; i++) {
-            assertGe(shares[i].share, 142_857_142_857_142_857);
-            assertLe(shares[i].share, 142_857_142_857_142_858);
+            assertGe(FixedU18.unwrap(shares[i].share), 142_857_142_857_142_857);
+            assertLe(FixedU18.unwrap(shares[i].share), 142_857_142_857_142_858);
         }
     }
 
@@ -80,8 +80,8 @@ contract SRASharesTest is SRATestBase {
         assertEq(_sumShares(shares), 1e18);
         for (uint256 i = 0; i < shares.length; i++) {
             // 58823529411764705 * 17 = 999999999999999985, remainder 15 -> 15 shares +1
-            assertGe(shares[i].share, 58_823_529_411_764_705);
-            assertLe(shares[i].share, 58_823_529_411_764_706);
+            assertGe(FixedU18.unwrap(shares[i].share), 58_823_529_411_764_705);
+            assertLe(FixedU18.unwrap(shares[i].share), 58_823_529_411_764_706);
         }
     }
 
@@ -118,7 +118,7 @@ contract SRASharesTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1);
         assertEq(shares[0].wallet, address(sra)); // initial map unchanged
-        assertEq(shares[0].share, 1e18);
+        assertEq(FixedU18.unwrap(shares[0].share), 1e18);
     }
 
     /// Strategy 4 variant: all orchestrators excluded (posted but all frozen within the posting period) -> total=0 -> no-op.
@@ -134,7 +134,7 @@ contract SRASharesTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1);
         assertEq(shares[0].wallet, address(sra)); // initial map unchanged
-        assertEq(shares[0].share, 1e18);
+        assertEq(FixedU18.unwrap(shares[0].share), 1e18);
     }
 
     // ------------------------------------------------------------------------
@@ -153,7 +153,7 @@ contract SRASharesTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1); // only a
         assertEq(shares[0].wallet, a);
-        assertEq(shares[0].share, 1e18);
+        assertEq(FixedU18.unwrap(shares[0].share), 1e18);
     }
 
     /// Strategy 3/S5 snapshot: frozen in the posting period -> frozen at the E+POST instant -> unfrozen in the verification window -> still excluded.
@@ -186,7 +186,7 @@ contract SRASharesTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1);
         assertEq(shares[0].wallet, a);
-        assertEq(shares[0].share, 1e18);
+        assertEq(FixedU18.unwrap(shares[0].share), 1e18);
     }
 
     /// Strategy 3/S5 snapshot counterexample: normal in the posting period -> frozen in the verification window -> unfrozen at E+POST -> still included.
@@ -273,13 +273,13 @@ contract SRASharesTest is SRATestBase {
 
     function _sumShares(Share[] memory shares) internal pure returns (uint256 sum) {
         for (uint256 i = 0; i < shares.length; i++) {
-            sum += shares[i].share;
+            sum += FixedU18.unwrap(shares[i].share);
         }
     }
 
     function _walletShare(Share[] memory shares, address wallet) internal pure returns (uint256) {
         for (uint256 i = 0; i < shares.length; i++) {
-            if (shares[i].wallet == wallet) return shares[i].share;
+            if (shares[i].wallet == wallet) return FixedU18.unwrap(shares[i].share);
         }
         return 0;
     }
@@ -310,7 +310,7 @@ contract SRASharesTest is SRATestBase {
         assertEq(shares.length, 64); // mock MAX_RECIPIENTS boundary: exactly 64 accepted
         assertEq(_sumShares(shares), 1e18);
         for (uint256 i = 0; i < shares.length; i++) {
-            assertEq(shares[i].share, 1e18 / 64); // 15625000000000000, divides evenly
+            assertEq(FixedU18.unwrap(shares[i].share), 1e18 / 64); // 15625000000000000, divides evenly
         }
     }
 
@@ -351,7 +351,7 @@ contract SRASharesTest is SRATestBase {
         // quarter 1's share map is independent: A/B did not post in quarter 1 (usdValue=0 filtered) -> no residue
         assertEq(q1.length, 1);
         assertEq(q1[0].wallet, c);
-        assertEq(q1[0].share, 1e18);
+        assertEq(FixedU18.unwrap(q1[0].share), 1e18);
     }
 
     // ------------------------------------------------------------------------
@@ -386,7 +386,7 @@ contract SRASharesTest is SRATestBase {
         Share[] memory q1 = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(q1.length, 1);
         assertEq(q1[0].wallet, b);
-        assertEq(q1[0].share, 1e18);
+        assertEq(FixedU18.unwrap(q1[0].share), 1e18);
     }
 
     // ------------------------------------------------------------------------
@@ -413,7 +413,7 @@ contract SRASharesTest is SRATestBase {
         assertGt(shares.length, 0);
         assertEq(_sumShares(shares), 1e18); // largest-remainder: floor + remainder-descending top-up, Σ always exact
         for (uint256 i = 0; i < shares.length; i++) {
-            assertGt(shares[i].share, 0); // zero-share entries are trimmed before setShares
+            assertGt(FixedU18.unwrap(shares[i].share), 0); // zero-share entries are trimmed before setShares
         }
     }
 
@@ -456,7 +456,7 @@ contract SRASharesTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1);
         assertEq(shares[0].wallet, orch);
-        assertEq(shares[0].share, 1e18);
+        assertEq(FixedU18.unwrap(shares[0].share), 1e18);
     }
 
     // ------------------------------------------------------------------------

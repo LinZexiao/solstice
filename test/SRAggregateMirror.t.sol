@@ -259,7 +259,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1, "frozen-at-E+POST excluded from the mirror");
         assertEq(shares[0].wallet, b, "only b remains");
-        assertEq(shares[0].share, 1e18, "b gets 100%");
+        assertEq(FixedU18.unwrap(shares[0].share), 1e18, "b gets 100%");
     }
 
     /// correctVolume can be the first writer of a quarter (backfill): it triggers the mirror
@@ -285,7 +285,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1, "backfill only contributor of q=1");
         assertEq(shares[0].wallet, b);
-        assertEq(shares[0].share, 1e18);
+        assertEq(FixedU18.unwrap(shares[0].share), 1e18);
     }
 
     /// correctVolume backfill advancing the quarter must not leak the previous quarter's value
@@ -382,7 +382,7 @@ contract SRAggregateMirrorTest is SRATestBase {
     /// @dev share of a wallet in the map (0 if absent).
     function _shareOf(Share[] memory shares, address wallet) internal pure returns (uint256) {
         for (uint256 i = 0; i < shares.length; i++) {
-            if (shares[i].wallet == wallet) return shares[i].share;
+            if (shares[i].wallet == wallet) return FixedU18.unwrap(shares[i].share);
         }
         return 0;
     }

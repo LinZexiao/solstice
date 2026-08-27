@@ -29,7 +29,7 @@ pragma solidity ^0.8.36;
 // ============================================================================
 
 import {Epoch, currentEpoch} from "./lib/Epoch.sol";
-import {FixedU18, ONE, ONE_WAD} from "./lib/FixedU18.sol";
+import {FixedU18, ONE, ZERO} from "./lib/FixedU18.sol";
 import {FVMRewards} from "./lib/FVMRewards.sol";
 import {Share} from "./lib/FVMRewardTypes.sol";
 import {OwnersLibrary} from "./lib/Owners.sol";
@@ -53,7 +53,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     uint64 private constant SERVICE_STREAM_ID = 2;
 
     /// @dev Total share (f02 encoding constraint: Σ shares must be exactly == 1e18).
-    uint256 private constant SHARE_TOTAL = 1e18;
+    FixedU18 private constant SHARE_TOTAL = ONE;
 
     /// @dev PRICE_BAND in basis points (10000 = 100%).
     uint256 private constant BASIS_POINTS = 10_000;
@@ -302,8 +302,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
         bool adjacent = q == qt.activeQ + 1;
         for (uint256 i = 0; i < r.admittedIds.length; i++) {
             SraStorage.OrchestratorInfo storage o = r.orchestrators[r.admittedIds[i]];
-            o.prevFpv = adjacent ? (o.frozenAtPostEnd ? FixedU18.wrap(0) : o.fpv) : FixedU18.wrap(0);
-            o.fpv = FixedU18.wrap(0);
+            o.prevFpv = adjacent ? (o.frozenAtPostEnd ? ZERO : o.fpv) : ZERO;
+            o.fpv = ZERO;
             o.frozenAtPostEnd = false; // new quarter: E+POST not reached, nothing frozen yet
         }
         qt.activeQ = q;
@@ -353,7 +353,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // bound it at the entry so the share arithmetic cannot overflow (see MAX_FPV_USD).
         // Reject zero: a zero total is equivalent to not posting (both excluded from the
         // aggregate), so `usd == 0` unambiguously means "not posted".
-        require(FixedU18.unwrap(fpv) > 0 && fpv <= MAX_FPV_USD, InvalidParameter());
+        require(fpv > ZERO && fpv <= MAX_FPV_USD, InvalidParameter());
 
         SraStorage.SraStorageQuarter storage qt = _quarter();
 
@@ -362,7 +362,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         _syncMirror(qt);
         _assertMirrorWindow(qt, q);
         if (qt.activeQ != q) _advanceMirror(qt, q);
-        require(FixedU18.unwrap(o.fpv) == 0, AlreadyPosted(q));
+        require(o.fpv == ZERO, AlreadyPosted(q));
         o.fpv = fpv; // FixedU18 — 18-decimal USD, type-checked from the entry
         qt.totalUsd[q] = qt.totalUsd[q] + fpv;
 
@@ -388,8 +388,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.admitted = true;
         o.frozenSince = Epoch.wrap(0); // fresh identity: no residual freeze state
         o.frozenAtPostEnd = false;
-        o.fpv = FixedU18.wrap(0);
-        o.prevFpv = FixedU18.wrap(0);
+        o.fpv = ZERO;
+        o.prevFpv = ZERO;
         r.activeIdOf[orch] = id;
         r.admittedIds.push(id);
         emit OrchestratorAdmitted(orch);
@@ -421,7 +421,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // boundary): unlike freeze, removal drops the orchestrator from the admitted list, so the
         // map and the aggregate must exclude it together for every pre-binding removal.
         uint64 q = _quarter().activeQ;
-        if (!_afterBinding(q) && !o.frozenAtPostEnd && FixedU18.unwrap(o.fpv) > 0) {
+        if (!_afterBinding(q) && !o.frozenAtPostEnd && o.fpv > ZERO) {
             _quarter().totalUsd[q] = _quarter().totalUsd[q] - o.fpv;
         }
         o.admitted = false;
@@ -444,7 +444,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // fpv-effectiveness: a freeze before the posting window closes excludes the active
         // quarter (E+POST snapshot); from the verification window onward the quarter is fixed.
         uint64 q = _quarter().activeQ;
-        if (nowE <= _qEnd(q) + POST_PERIOD && FixedU18.unwrap(o.fpv) > 0) {
+        if (nowE <= _qEnd(q) + POST_PERIOD && o.fpv > ZERO) {
             _quarter().totalUsd[q] = _quarter().totalUsd[q] - o.fpv; // fpv retained as unfreeze restore source
             o.frozenAtPostEnd = true;
         }
@@ -463,7 +463,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // Symmetric with freeze: an unfreeze before the posting window closes re-includes the
         // active-quarter contribution (if posted); from the verification window onward it is fixed.
         uint64 q = _quarter().activeQ;
-        if (nowE <= _qEnd(q) + POST_PERIOD && FixedU18.unwrap(o.fpv) > 0) {
+        if (nowE <= _qEnd(q) + POST_PERIOD && o.fpv > ZERO) {
             _quarter().totalUsd[q] = _quarter().totalUsd[q] + o.fpv;
             o.frozenAtPostEnd = false;
         }
@@ -641,16 +641,16 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // collection. The quarter counter (totalUsd) is a binding snapshot that can outlive a
         // lag-window remove, so it must not drive the largest-remainder split
         // (an oversized total underflowed the bump loop). aggregatedFPV keeps the counter (O(1)).
-        FixedU18 total = FixedU18.wrap(0);
+        FixedU18 total = ZERO;
         for (uint256 i = 0; i < r.admittedIds.length; i++) {
             uint64 id = r.admittedIds[i];
             SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
             if (usePrev) {
-                if (FixedU18.unwrap(o.prevFpv) == 0) continue;
+                if (o.prevFpv == ZERO) continue;
                 wallets[count] = o.wallet; // current effective wallet (replace re-points it)
                 usds[count] = o.prevFpv;
             } else {
-                if (o.frozenAtPostEnd || FixedU18.unwrap(o.fpv) == 0) continue;
+                if (o.frozenAtPostEnd || o.fpv == ZERO) continue;
                 wallets[count] = o.wallet;
                 usds[count] = o.fpv;
             }
@@ -660,7 +660,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
         // FIP-0118: an all-zero quarter is a benign no-op — no SplitRule, no SetShares, existing map stands.
         // It still counts as submitted (the quarter cannot be resubmitted).
-        if (FixedU18.unwrap(total) == 0) {
+        if (total == ZERO) {
             qt.lastSubmittedQ = q + 1;
             return;
         }
@@ -671,7 +671,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // Real f02 SetShares rejects share==0 entries (as does the mock), so drop them here.
         uint256 kept = 0;
         for (uint256 i = 0; i < shares.length; i++) {
-            if (shares[i].share > 0) shares[kept++] = shares[i];
+            if (shares[i].share > ZERO) shares[kept++] = shares[i];
         }
         if (kept < shares.length) {
             assembly ("memory-safe") {
@@ -740,7 +740,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // exist); earlier quarters return 0 — the aggregate is the only historical read (totalUsd).
         if (q == activeQ) return FPV({usd: o.fpv});
         if (activeQ > 0 && q == activeQ - 1) return FPV({usd: o.prevFpv});
-        return FPV({usd: FixedU18.wrap(0)});
+        return FPV({usd: ZERO});
     }
 
     function isStablecoinAdmitted(address token) external view returns (bool) {
@@ -769,25 +769,20 @@ contract ServiceRewardsActor is UnanimousGovernance {
         shares = new Share[](n);
         uint256[] memory remainders = new uint256[](n);
         bool[] memory bumped = new bool[](n);
-        uint256 residue = SHARE_TOTAL;
-        // Remainders keep the integer-USD formulation (usd * 1e18 % total): the FixedU18 division
-        // shareF = usds[i] * ONE / total computes div(mul(usd, 1e18), total), so its integer
-        // remainder is usd * 1e18 % total — identical ordering to the previous uint256 path.
-        uint256 totalUsd = FixedU18.unwrap(total);
+        FixedU18 residue = SHARE_TOTAL;
         for (uint256 i = 0; i < n; i++) {
-            // 18-decimal fixed-point: usd * SHARE_TOTAL / total, mathematically identical to the
-            // integer-USD form (usd_f = usd, total_f = total are already 18-decimal). Type-safe
-            // against integer/fixed-point magnitude mixing.
-            FixedU18 shareF = usds[i] * ONE / total;
-            shares[i] = Share({wallet: wallets[i], share: FixedU18.unwrap(shareF)});
-            // remainder = (usd_f × 1e18) % total_f = (usd × 1e18 % total_int) × 1e18 — the integer-USD
-            // remainder scaled by 1e18; the common ×1e18 factor preserves relative ordering, so the
-            // largest-remainder assignment order is bit-identical to the integer formulation.
-            remainders[i] = FixedU18.unwrap(usds[i]) * ONE_WAD % totalUsd;
-            residue -= shares[i].share;
+            // 18-decimal fixed-point: share = usd / total (divDown scales by 1e18 internally),
+            // mathematically identical to usd × 1e18 / total — both operands are already 18-decimal.
+            FixedU18 shareF = usds[i] / total;
+            shares[i] = Share({wallet: wallets[i], share: shareF});
+            // remainder = divDown's integer remainder (mul(usd, 1e18) mod total) — same relative
+            // ordering as the pre-migration integer-USD formulation, so the largest-remainder
+            // assignment order is bit-identical.
+            remainders[i] = FixedU18.unwrap(usds[i] % total);
+            residue = residue - shares[i].share;
         }
         // Remainder descending: each round tops up +1 to the largest remaining remainder (n <= 64, O(n²) acceptable)
-        for (uint256 r = 0; r < residue; r++) {
+        for (uint256 r = 0; r < FixedU18.unwrap(residue); r++) {
             uint256 best = type(uint256).max;
             uint256 bestRem = 0;
             for (uint256 i = 0; i < n; i++) {
@@ -797,7 +792,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
                 }
             }
             bumped[best] = true;
-            shares[best].share += 1;
+            shares[best].share = shares[best].share + FixedU18.wrap(1);
         }
     }
 

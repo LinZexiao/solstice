@@ -20,6 +20,7 @@ import {
 } from "../../src/lib/FVMRewardMethod.sol";
 import {WeightRecord, DistributionKind, Share, PendingOp} from "../../src/lib/FVMRewardTypes.sol";
 import {Epoch} from "../../src/lib/Epoch.sol";
+import {FixedU18} from "../../src/lib/FixedU18.sol";
 
 /// @dev Weights, and per-orchestrator shares, are WAD-scaled: 1e18 == 1.0 == 100%.
 int256 constant WAD = 1e18;
@@ -690,7 +691,7 @@ contract FVMRewardActor {
             (wallet, pos) = _decodeAddress(pos);
             uint64 share;
             (share, pos) = _decodeCborUint64(pos);
-            shares[i] = Share({wallet: wallet, share: share});
+            shares[i] = Share({wallet: wallet, share: FixedU18.wrap(share)});
         }
         newPos = pos;
     }
@@ -1001,11 +1002,11 @@ contract FVMRewardActor {
         if (shares.length > MAX_RECIPIENTS) return false;
         uint256 total;
         for (uint256 i = 0; i < shares.length; i++) {
-            if (shares[i].share == 0) return false;
+            if (FixedU18.unwrap(shares[i].share) == 0) return false;
             for (uint256 j = 0; j < i; j++) {
                 if (shares[j].wallet == shares[i].wallet) return false;
             }
-            total += shares[i].share;
+            total += FixedU18.unwrap(shares[i].share);
         }
         return total == SHARE_TOTAL;
     }
@@ -1262,7 +1263,7 @@ contract FVMRewardActor {
 
     function _shareOf(Stream storage s, address wallet) internal view returns (uint256) {
         for (uint256 i = 0; i < s.shares.length; i++) {
-            if (s.shares[i].wallet == wallet) return s.shares[i].share;
+            if (s.shares[i].wallet == wallet) return FixedU18.unwrap(s.shares[i].share);
         }
         return 0;
     }
@@ -1274,7 +1275,7 @@ contract FVMRewardActor {
         uint256 earnedSum;
         for (uint256 i = 0; i < s.shares.length; i++) {
             address wallet = s.shares[i].wallet;
-            uint256 earned = (s.shares[i].share * pool) / SHARE_TOTAL;
+            uint256 earned = (FixedU18.unwrap(s.shares[i].share) * pool) / SHARE_TOTAL;
             earnedSum += earned;
             uint256 claimed = s.claimedPeriod.amount[wallet];
             if (earned > claimed) {

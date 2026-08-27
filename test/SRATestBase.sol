@@ -93,7 +93,7 @@ contract SRATestBase is MockRewardTest {
         rewardActor().mockSwa(address(this));
 
         Share[] memory initialShares = new Share[](1);
-        initialShares[0] = Share({wallet: address(sra), share: 1e18});
+        initialShares[0] = Share({wallet: address(sra), share: FixedU18.wrap(1e18)});
         int256 exitCode = FVMRewards.tryRegisterStream(
             SERVICE_STREAM_ID,
             WeightRecord({vStart: 0, slope: 0, tStart: Epoch.wrap(0), floor: 0, cap: WAD}),

@@ -8,6 +8,7 @@ import {CBOR_CODEC} from "fvm-solidity/FVMCodec.sol";
 import {EXIT_SUCCESS} from "fvm-solidity/FVMErrors.sol";
 
 import {Epoch} from "./Epoch.sol";
+import {FixedU18} from "./FixedU18.sol";
 import {
     REGISTER_STREAM,
     REMOVE_STREAM,
@@ -198,8 +199,9 @@ library FVMRewards {
         for (uint256 i = 0; i < shares.length; i++) {
             p = _writeArrayHeader(p, 2);
             p = _writeAddress(p, shares[i].wallet);
-            if (shares[i].share > type(uint64).max) revert ValueOutOfRange(int256(shares[i].share));
-            p = _writeUint(p, shares[i].share);
+            uint256 share = FixedU18.unwrap(shares[i].share);
+            if (share > type(uint64).max) revert ValueOutOfRange(int256(share));
+            p = _writeUint(p, share);
         }
         return p;
     }

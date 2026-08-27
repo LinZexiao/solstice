@@ -11,6 +11,7 @@ import {StreamWeightActor} from "../src/StreamWeightActor.sol";
 import {IServiceRewardsActor} from "../src/interfaces/IServiceRewardsActor.sol";
 import {PendingOp, Share, WeightRecord, WeightRecordUpdate} from "../src/lib/FVMRewardTypes.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
+import {FixedU18} from "../src/lib/FixedU18.sol";
 import {FVMRewards} from "../src/lib/FVMRewards.sol";
 import {SWA_TIMELOCK} from "../src/lib/FVMRewardMethod.sol";
 
@@ -66,7 +67,7 @@ contract StreamWeightActorTest is MockRewardTest {
 
     function _shares() internal pure returns (Share[] memory shares) {
         shares = new Share[](1);
-        shares[0] = Share({wallet: WRITER, share: uint256(WAD)});
+        shares[0] = Share({wallet: WRITER, share: FixedU18.wrap(uint256(WAD))});
     }
 
     function _singleWeightRecord(uint64 id, WeightRecord memory record)

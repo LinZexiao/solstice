@@ -27,6 +27,7 @@ import {CLAIM, SWA_TIMELOCK} from "../../src/lib/FVMRewardMethod.sol";
 import {FVMRewards} from "../../src/lib/FVMRewards.sol";
 import {WeightRecordUpdate} from "../../src/lib/FVMRewardTypes.sol";
 import {Epoch} from "../../src/lib/Epoch.sol";
+import {FixedU18} from "../../src/lib/FixedU18.sol";
 
 /// @dev A distinct external caller, so tests can check authorization by identity rather than
 /// by happenstance of who the test contract is. The typed methods below go through FVMRewards
@@ -192,7 +193,7 @@ contract FVMRewardActorTest is MockRewardTest {
 
     function _shares(address wallet, uint256 amount) internal pure returns (Share[] memory arr) {
         arr = new Share[](1);
-        arr[0] = Share({wallet: wallet, share: amount});
+        arr[0] = Share({wallet: wallet, share: FixedU18.wrap(amount)});
     }
 
     function _wallets(address a) internal pure returns (address[] memory arr) {
@@ -560,8 +561,8 @@ contract FVMRewardActorTest is MockRewardTest {
     function test_SetShares_ZeroShare_IllegalArgument() public {
         _registerExplicit(SERVICE_ID, address(writerCaller));
         Share[] memory shares_ = new Share[](2);
-        shares_[0] = Share({wallet: RECIPIENT_A, share: SHARE_TOTAL});
-        shares_[1] = Share({wallet: RECIPIENT_B, share: 0});
+        shares_[0] = Share({wallet: RECIPIENT_A, share: FixedU18.wrap(SHARE_TOTAL)});
+        shares_[1] = Share({wallet: RECIPIENT_B, share: FixedU18.wrap(0)});
         assertEq(writerCaller.setShares(SERVICE_ID, shares_), USR_ILLEGAL_ARGUMENT);
     }
 
@@ -570,8 +571,8 @@ contract FVMRewardActorTest is MockRewardTest {
     function test_SetShares_DuplicateRecipient_IllegalArgument() public {
         _registerExplicit(SERVICE_ID, address(writerCaller));
         Share[] memory shares_ = new Share[](2);
-        shares_[0] = Share({wallet: RECIPIENT_A, share: SHARE_TOTAL / 2});
-        shares_[1] = Share({wallet: RECIPIENT_A, share: SHARE_TOTAL / 2});
+        shares_[0] = Share({wallet: RECIPIENT_A, share: FixedU18.wrap(SHARE_TOTAL / 2)});
+        shares_[1] = Share({wallet: RECIPIENT_A, share: FixedU18.wrap(SHARE_TOTAL / 2)});
         assertEq(writerCaller.setShares(SERVICE_ID, shares_), USR_ILLEGAL_ARGUMENT);
     }
 
@@ -580,7 +581,7 @@ contract FVMRewardActorTest is MockRewardTest {
         uint256 n = MAX_RECIPIENTS + 1;
         Share[] memory shares_ = new Share[](n);
         for (uint256 i = 0; i < n; i++) {
-            shares_[i] = Share({wallet: address(uint160(i + 1)), share: SHARE_TOTAL / n});
+            shares_[i] = Share({wallet: address(uint160(i + 1)), share: FixedU18.wrap(SHARE_TOTAL / n)});
         }
         uint32 exitCode = writerCaller.setShares(SERVICE_ID, shares_);
         assertEq(exitCode, USR_ILLEGAL_ARGUMENT);
@@ -596,7 +597,7 @@ contract FVMRewardActorTest is MockRewardTest {
         Share[] memory got = rewardActor().getShares(SERVICE_ID);
         assertEq(got.length, 1);
         assertEq(got[0].wallet, RECIPIENT_A);
-        assertEq(got[0].share, SHARE_TOTAL);
+        assertEq(FixedU18.unwrap(got[0].share), SHARE_TOTAL);
     }
 
     function test_SetShares_FoldsAccruedIntoPayable_AndBurnsResidue() public {
@@ -1044,8 +1045,8 @@ contract FVMRewardActorTest is MockRewardTest {
     function test_Claim_MultipleWallets_ReturnsAmountsInOrder() public {
         _registerExplicit(SERVICE_ID, address(writerCaller)); // weight 0.1e18
         Share[] memory shares_ = new Share[](2);
-        shares_[0] = Share({wallet: RECIPIENT_A, share: 0.6e18});
-        shares_[1] = Share({wallet: RECIPIENT_B, share: 0.4e18});
+        shares_[0] = Share({wallet: RECIPIENT_A, share: FixedU18.wrap(0.6e18)});
+        shares_[1] = Share({wallet: RECIPIENT_B, share: FixedU18.wrap(0.4e18)});
         uint32 setSharesExit = writerCaller.setShares(SERVICE_ID, shares_);
         assertEq(setSharesExit, 0);
 

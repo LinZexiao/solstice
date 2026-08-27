@@ -2,6 +2,7 @@
 pragma solidity ^0.8.36;
 
 import {Epoch} from "./Epoch.sol";
+import {FixedU18} from "./FixedU18.sol";
 
 /// @notice A stream's Distribution kind (FIP-0118 Section 2.4).
 /// @dev IMPLICIT streams store no writer (f02 resolves the recipient from protocol state).
@@ -31,10 +32,11 @@ struct WeightRecordUpdate {
 
 /// @notice One entry in an EXPLICIT stream's wallet-to-share map.
 /// @dev Shares across a stream's map must sum to SHARE_TOTAL (1e18); a single share must
-///      therefore fit uint64.
+///      therefore fit uint64. Shares are FixedU18-scaled (1e18 == 1.0) so that
+///      largest-remainder arithmetic can stay in the fixed-point domain.
 struct Share {
     address wallet;
-    uint256 share;
+    FixedU18 share;
 }
 
 /// @notice The kinds of queueable SWA discretionary writes a pending slot may hold.

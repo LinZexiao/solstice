@@ -6,6 +6,7 @@ import {FVMAddress} from "fvm-solidity/FVMAddress.sol";
 import {MockRewardWireTest} from "./MockRewardWireTest.sol";
 import {WeightRecord, WeightRecordUpdate, Share, PendingOp} from "../../src/lib/FVMRewardTypes.sol";
 import {Epoch} from "../../src/lib/Epoch.sol";
+import {FixedU18} from "../../src/lib/FixedU18.sol";
 import {FVMRewards} from "../../src/lib/FVMRewards.sol";
 
 /// @dev Tests to match with Rust `fil_actor_reward` tests/types_test.rs `mod serialization`, whose
@@ -104,7 +105,7 @@ contract FVMRewardWireTest is MockRewardWireTest {
     // ]
     function test_RegisterStream_ExplicitCarriesWriterAndInitialMap() public {
         Share[] memory shares = new Share[](1);
-        shares[0] = Share({wallet: FVMAddress.maskedAddress(4_294_967_296), share: 1e18});
+        shares[0] = Share({wallet: FVMAddress.maskedAddress(4_294_967_296), share: FixedU18.wrap(1e18)});
         FVMRewards.tryRegisterStream(
             4_294_967_296,
             _record(4_294_967_296, -4_294_967_296, 65_536, 256, 1e18),
@@ -160,7 +161,7 @@ contract FVMRewardWireTest is MockRewardWireTest {
         uint64[4] memory v = [uint64(24), 256, 65_536, 4_294_967_296];
         Share[] memory shares = new Share[](4);
         for (uint256 i = 0; i < 4; i++) {
-            shares[i] = Share({wallet: FVMAddress.maskedAddress(v[i]), share: v[i]});
+            shares[i] = Share({wallet: FVMAddress.maskedAddress(v[i]), share: FixedU18.wrap(v[i])});
         }
         FVMRewards.trySetShares(256, shares);
         assertEq(
@@ -174,7 +175,7 @@ contract FVMRewardWireTest is MockRewardWireTest {
     function test_SetShares_MaxRecipients() public {
         Share[] memory shares = new Share[](64);
         for (uint64 i = 0; i < 64; i++) {
-            shares[i] = Share({wallet: FVMAddress.maskedAddress(1000 + i), share: 1e18 / 64});
+            shares[i] = Share({wallet: FVMAddress.maskedAddress(1000 + i), share: FixedU18.wrap(1e18 / 64)});
         }
         FVMRewards.trySetShares(65_536, shares);
         assertEq(
