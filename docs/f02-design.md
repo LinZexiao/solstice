@@ -53,7 +53,10 @@ streams[]        [ id, WeightRecord[v_start, slope, t_start, floor, cap], distri
                               # stream only (the block winner)
   EXPLICIT  = [ writer,       # FIP "designated writer": may call SetShares.
                               # The SRA for the service stream. Not a payee.
-      shares[]:         [[wallet, share], ...]    # payees; <= MAX_RECIPIENTS
+      shares[]:         [[wallet, share], ...]    # payees; <= MAX_RECIPIENTS.
+                              # Sums to DENOM on the wire; stored shares may sum
+                              # lower, the shortfall being the burn share (see
+                              # "The f099 burn sentinel").
       payable[]:        [[wallet, amount], ...]   # unclaimed from closed periods
       claimed_period[]: [[wallet, amount], ...] ] # claimed from the current accrual
 
@@ -131,7 +134,11 @@ AwardBlockReward(miner, penalty, gas_reward, win_count):
     if any weight record is malformed or sum(evaluated weights) > DENOM:
         pay gas_reward and apply the penalty; commit no state or counter change; return
     miner = floor(w1 * BR)
-    explicit = floor(w2 * BR) if accounting_valid else 0
+    for each explicit stream:
+        portion = floor(w_stream * BR)
+        # burn sentinel: stored shares summing below DENOM burn the shortfall
+        accrue_to_stream = floor(portion * stored_share_total / DENOM)
+    explicit = sum(accrue_to_stream) if accounting_valid else 0
     burn = BR - miner - explicit
     total_minted_reward += BR
     total_burn_minted += burn
@@ -159,13 +166,14 @@ Applied and dropped events on this implicit path are best-effort. FIP-0107 is re
 ```
 SetShares(stream_id, new_map):
     caller must be the stream's designated writer
-    validate sum(new_map shares) == 1 and every share > 0
+    validate sum(new_map shares) == DENOM and every share > 0
     resolve recipients to ID addresses; reject the call if any does not resolve
     (recipients must exist; the SRA pre-validates at registration, so this is
      a backstop against typos and stranded credits)
+    strip any f099 rows before storing; their weight becomes the burn share
     pool = accrued[stream_id]
     for each (wallet, share) in the OLD map:
-        earned = floor(share * pool)
+        earned = floor(share * pool / stored_share_total)
         payable[wallet] += earned - claimed_period[wallet]
     residue = pool - sum(earned)             # rounding dust only
     send(f099, residue)                       # neither counter moves
@@ -190,7 +198,8 @@ Claim(stream_id, wallets[]) -> amounts[]:
             entitlement = its payable[wallet]              # nothing live on a tombstone
         else:
             s = the stream's EXPLICIT distribution
-            live = floor(share_of(s.shares, wallet) * accrued[stream_id])
+            live = floor(share_of(s.shares, wallet) * accrued[stream_id]
+                         / stored_share_total(s.shares))       # zero total pays nothing
                  - amount_of(s.claimed_period, wallet)         # current period
             entitlement = live + amount_of(s.payable, wallet)  # + unclaimed previous
         if entitlement == 0: amounts[i] = 0; continue
@@ -203,6 +212,28 @@ Claim(stream_id, wallets[]) -> amounts[]:
 ```
 
 Permissionless, batched, recipients fixed by the map, works mid-period. A batch is capped at `MAX_RECIPIENTS`, so a full payable table drains in two calls. Zero-entitlement entries (unknown wallets, duplicates within the batch) pay nothing and return 0 at their position. An unknown or deleted stream id returns all zeros, so a repeated claim after its tombstone drains is benign. An all-zero batch succeeds.
+
+## The f099 burn sentinel
+
+f099 in an explicit share map is a burn instruction, not a payee. Wire shares still sum to
+`DENOM`; share-map admission validates that checksum, then strips all f099 rows. The stored
+shortfall is the burn share. Persisted state rejects f099, so it cannot accrue, be claimed, or
+reach a tombstone.
+
+For each explicit stream award:
+
+```
+accrue = floor(portion * stored_share_total / DENOM)
+burn += portion - accrue
+```
+
+Only `accrue` enters the stream pool and `total_explicit_minted`; the remainder uses the
+existing burn send and counter. Flooring the survivor side prevents a removal from improving
+survivor earnings through rounding.
+
+Claim and fold divide the survivor pool by `stored_share_total`, leaving stored share values
+unchanged. A total of `DENOM` uses the ordinary path; zero accrues nothing and burns the whole
+portion. The total is derived from the inline share vector, bounded by `MAX_RECIPIENTS`.
 
 ## Supply accounting
 

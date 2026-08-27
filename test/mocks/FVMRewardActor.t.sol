@@ -349,6 +349,36 @@ contract FVMRewardActorTest is MockRewardTest {
         assertEq(exitCode, USR_ILLEGAL_ARGUMENT);
     }
 
+    function test_RegisterStream_StripsBurnSentinels_AndFloorsSurvivorPool() public {
+        uint256 third = SHARE_TOTAL / 3;
+        Share[] memory shares_ = new Share[](4);
+        shares_[0] = Share({wallet: RECIPIENT_A, share: FixedU18.wrap(third)});
+        shares_[1] = Share({wallet: BURN_ADDRESS, share: FixedU18.wrap(third)});
+        shares_[2] = Share({wallet: RECIPIENT_B, share: FixedU18.wrap(third)});
+        shares_[3] = Share({wallet: BURN_ADDRESS, share: FixedU18.wrap(SHARE_TOTAL - third * 3)});
+
+        uint32 exitCode = swaCaller.registerStream(
+            SERVICE_ID, _constantRecord(WAD), address(writerCaller), shares_, uint64(block.number) + SWA_TIMELOCK
+        );
+        assertEq(exitCode, 0);
+        _warpPastTimelockAndSettle();
+
+        Share[] memory stored = rewardActor().getShares(SERVICE_ID);
+        assertEq(stored.length, 2);
+        assertEq(stored[0].wallet, RECIPIENT_A);
+        assertEq(FixedU18.unwrap(stored[0].share), third);
+        assertEq(stored[1].wallet, RECIPIENT_B);
+        assertEq(FixedU18.unwrap(stored[1].share), third);
+
+        (uint256 minerPortion, uint256 servicePortion, uint256 burnAmount) = rewardActor().mockAwardBlockReward(2);
+        assertEq(minerPortion, 0);
+        assertEq(servicePortion, 1, "floor the survivor pool before deriving burn");
+        assertEq(burnAmount, 1);
+        assertEq(_streams()[0].accrued, 1);
+        assertEq(rewardActor().totalServiceMinted(), 1);
+        assertEq(rewardActor().totalBurnMinted(), 1);
+    }
+
     // Zero is reserved and could come to signify the burn stream.
     function test_RegisterStream_ZeroId_IllegalArgument() public {
         assertEq(
@@ -620,6 +650,47 @@ contract FVMRewardActorTest is MockRewardTest {
         // New map installed for the next period.
         Share[] memory got = rewardActor().getShares(SERVICE_ID);
         assertEq(got[0].wallet, RECIPIENT_B);
+    }
+
+    function test_SetShares_BurnSentinelCarvesAccrual_AndNeverBecomesClaimable() public {
+        _registerExplicit(SERVICE_ID, address(writerCaller)); // weight 0.1e18
+
+        Share[] memory partialBurn = new Share[](3);
+        partialBurn[0] = Share({wallet: RECIPIENT_A, share: FixedU18.wrap(SHARE_TOTAL / 4)});
+        partialBurn[1] = Share({wallet: BURN_ADDRESS, share: FixedU18.wrap(SHARE_TOTAL / 2)});
+        partialBurn[2] = Share({wallet: RECIPIENT_B, share: FixedU18.wrap(SHARE_TOTAL / 4)});
+        assertEq(writerCaller.setShares(SERVICE_ID, partialBurn), 0);
+
+        Share[] memory stored = rewardActor().getShares(SERVICE_ID);
+        assertEq(stored.length, 2);
+        assertEq(stored[0].wallet, RECIPIENT_A);
+        assertEq(stored[1].wallet, RECIPIENT_B);
+
+        (, uint256 servicePortion, uint256 burnAmount) = rewardActor().mockAwardBlockReward(1 ether);
+        assertEq(servicePortion, 0.05 ether);
+        assertEq(burnAmount, 0.95 ether);
+        assertEq(_streams()[0].accrued, 0.05 ether);
+
+        (, uint256[] memory firstClaim) = _claim(SERVICE_ID, _wallets(RECIPIENT_A));
+        assertEq(firstClaim[0], 0.025 ether, "live claims divide by the stored share total");
+
+        assertEq(writerCaller.setShares(SERVICE_ID, _shares(BURN_ADDRESS, SHARE_TOTAL)), 0);
+        assertEq(rewardActor().getShares(SERVICE_ID).length, 0);
+        LedgerRow[] memory payableRows = rewardActor().getPayable(SERVICE_ID);
+        assertEq(payableRows.length, 1);
+        assertEq(payableRows[0].wallet, RECIPIENT_B);
+        assertEq(payableRows[0].amount, 0.025 ether, "folds divide by the closing stored share total");
+        assertEq(BURN_ADDRESS.balance, 0.95 ether, "the exact survivor pool leaves no fold residue");
+
+        (, uint256[] memory finalClaims) = _claim(SERVICE_ID, _wallets(RECIPIENT_B, BURN_ADDRESS));
+        assertEq(finalClaims[0], 0.025 ether);
+        assertEq(finalClaims[1], 0, "the burn sentinel never has a claimable balance");
+
+        (, servicePortion, burnAmount) = rewardActor().mockAwardBlockReward(1 ether);
+        assertEq(servicePortion, 0);
+        assertEq(burnAmount, 1 ether);
+        assertEq(rewardActor().totalServiceMinted(), 0.05 ether);
+        assertEq(rewardActor().totalBurnMinted(), 1.95 ether);
     }
 
     function test_RemoveStream_NotSwa_Forbidden() public {

@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {USR_FORBIDDEN, USR_ILLEGAL_ARGUMENT, USR_NOT_FOUND, USR_UNHANDLED_MESSAGE} from "fvm-solidity/FVMErrors.sol";
 import {CBOR_CODEC} from "fvm-solidity/FVMCodec.sol";
 import {FVMPay} from "fvm-solidity/FVMPay.sol";
+import {BURN_ADDRESS} from "fvm-solidity/FVMActors.sol";
 
 import {
     SET_WEIGHT_RECORDS,
@@ -232,8 +233,10 @@ contract FVMRewardActor {
             if (s.kind == DistributionKind.IMPLICIT) {
                 minerPortion += amount;
             } else {
-                servicePortion += amount;
-                s.accrued += amount;
+                uint256 storedShareTotal = _storedShareTotal(s);
+                uint256 accrued = storedShareTotal == SHARE_TOTAL ? amount : (amount * storedShareTotal) / SHARE_TOTAL;
+                servicePortion += accrued;
+                s.accrued += accrued;
             }
         }
         burnAmount = br - minerPortion - servicePortion;
@@ -361,9 +364,7 @@ contract FVMRewardActor {
         _foldAndBurnResidue(s);
 
         delete s.shares;
-        for (uint256 i = 0; i < newShares.length; i++) {
-            s.shares.push(newShares[i]);
-        }
+        _pushNonBurnShares(s.shares, newShares);
         return (0, 0, "");
     }
 
@@ -483,9 +484,7 @@ contract FVMRewardActor {
         if (!_admits(proposed)) return (USR_ILLEGAL_ARGUMENT, 0, "");
 
         delete _pendingShares[id];
-        for (uint256 i = 0; i < shares.length; i++) {
-            _pendingShares[id].push(shares[i]);
-        }
+        _pushNonBurnShares(_pendingShares[id], shares);
         _queueWrite(
             id,
             PendingOp.REGISTER,
@@ -614,6 +613,9 @@ contract FVMRewardActor {
             if (s.kind != DistributionKind.EXPLICIT) return (USR_ILLEGAL_ARGUMENT, 0, "");
         }
 
+        uint256 storedShareTotal;
+        if (!tombstoned) storedShareTotal = _storedShareTotal(s);
+
         uint256[] memory amounts = new uint256[](wallets.length);
         for (uint256 i = 0; i < wallets.length; i++) {
             address wallet = wallets[i];
@@ -629,7 +631,7 @@ contract FVMRewardActor {
             } else {
                 uint256 share = _shareOf(s, wallet);
                 uint256 claimed = s.claimedPeriod.amount[wallet];
-                uint256 grossLive = (share * s.accrued) / SHARE_TOTAL;
+                uint256 grossLive = storedShareTotal == 0 ? 0 : (share * s.accrued) / storedShareTotal;
                 uint256 live = grossLive > claimed ? grossLive - claimed : 0;
                 uint256 payableAmount = s.payableLedger.amount[wallet];
                 entitlement = live + payableAmount;
@@ -997,14 +999,16 @@ contract FVMRewardActor {
     /// @dev validate_weight_record: floor <= v_start <= cap <= DENOM. The lower bound on floor
     /// is implicit in f02, where these three are u64; here they are signed and it is not.
     /// @dev validate_shares: at most MAX_RECIPIENTS rows, every share nonzero, no repeated
-    /// recipient, and the whole map summing to one.
+    /// payee, and the whole wire map summing to one. Repeated burn instructions are equivalent.
     function _sharesValid(Share[] memory shares) internal pure returns (bool) {
         if (shares.length > MAX_RECIPIENTS) return false;
         uint256 total;
         for (uint256 i = 0; i < shares.length; i++) {
             if (FixedU18.unwrap(shares[i].share) == 0) return false;
-            for (uint256 j = 0; j < i; j++) {
-                if (shares[j].wallet == shares[i].wallet) return false;
+            if (shares[i].wallet != BURN_ADDRESS) {
+                for (uint256 j = 0; j < i; j++) {
+                    if (shares[j].wallet == shares[i].wallet) return false;
+                }
             }
             total += FixedU18.unwrap(shares[i].share);
         }
@@ -1268,14 +1272,27 @@ contract FVMRewardActor {
         return 0;
     }
 
+    function _storedShareTotal(Stream storage s) internal view returns (uint256 total) {
+        for (uint256 i = 0; i < s.shares.length; i++) {
+            total += FixedU18.unwrap(s.shares[i].share);
+        }
+    }
+
+    function _pushNonBurnShares(Share[] storage target, Share[] memory shares) internal {
+        for (uint256 i = 0; i < shares.length; i++) {
+            if (shares[i].wallet != BURN_ADDRESS) target.push(shares[i]);
+        }
+    }
+
     /// @dev Closes out the current period: each recipient's earned-minus-claimed amount moves
     /// into `payable` under the OLD map, the rounding residue burns, and accrual state resets.
     function _foldAndBurnResidue(Stream storage s) internal {
         uint256 pool = s.accrued;
+        uint256 shareTotal = _storedShareTotal(s);
         uint256 earnedSum;
         for (uint256 i = 0; i < s.shares.length; i++) {
             address wallet = s.shares[i].wallet;
-            uint256 earned = (FixedU18.unwrap(s.shares[i].share) * pool) / SHARE_TOTAL;
+            uint256 earned = (FixedU18.unwrap(s.shares[i].share) * pool) / shareTotal;
             earnedSum += earned;
             uint256 claimed = s.claimedPeriod.amount[wallet];
             if (earned > claimed) {
