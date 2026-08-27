@@ -317,7 +317,7 @@ contract SRAggregateMirrorTest is SRATestBase {
     /// remove (q0 bound, map not submitted) must revert PendingShares(0); after submitShares(0)
     /// clears the pending quarter the same removal succeeds. This also guarantees the submitted map
     /// is always consistent with the quarter counter (no removal binds between close-of-posting and
-    /// SubmitShares — the root cause of the former submitShares out-of-bounds panic).
+    /// SubmitShares).
     function test_Mirror_Remove_PendingShares_Reverts() public {
         address a = makeAddr("a");
         address b = makeAddr("b");
@@ -446,8 +446,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
     /// Once the verification window closes, AggregatedFPV(activeQ) is a fixed binding
     /// snapshot (spec §2.2: the read view exposes the bound values directly). A removal after
-    /// binding must not rewrite it — only a pre-E+POST removal excludes the contribution. The
-    /// former code deducted totalUsd unconditionally, drifting the bound aggregate.
+    /// binding must not rewrite it — only a pre-E+POST removal excludes the contribution.
     function test_Mirror_Remove_AfterBinding_KeepsSnapshot() public {
         address a = makeAddr("a");
         address b = makeAddr("b");
@@ -472,8 +471,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
     /// A removal in the verification window (E+POST passed, not yet bound) must exclude
     /// the orchestrator from BOTH the share map (it leaves the admitted list, which submitShares
-    /// collects) and the aggregate — otherwise aggregatedFPV(0) = 300 != map sum 100. The former
-    /// E+POST boundary (freeze's) left the aggregate at 300 while the map dropped b (probe).
+    /// collects) and the aggregate — otherwise aggregatedFPV(0) = 300 != map sum 100.
     function test_Mirror_Remove_InVerificationWindow_Excludes() public {
         address a = makeAddr("a");
         address b = makeAddr("b");

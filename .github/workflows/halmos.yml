@@ -39,9 +39,6 @@ jobs:
           forge build --force --extra-output metadata
 
       - name: Run symbolic verification
-        # QuarterWindowCheck only (the former ComputeSharesCheck was removed with
-        # the FixedU18 adoption — see docs/sra-design.md §4.5). Runs independently
-        # of the main test CI.
         run: |
           pip install halmos==0.1.13
           halmos --contract QuarterWindowCheck --no-test-constructor

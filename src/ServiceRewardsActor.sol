@@ -624,8 +624,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // previous-quarter mirror (prevFpv, exclusion-fixed at the advance). A q beyond activeQ
         // bound with no write (posting/verification elapsed with no postVolume/correctVolume) has
         // no data — an all-zero no-op: the quarter still counts as submitted, the existing map
-        // stands (previously any q != activeQ read prevFpv, misaligning the share map with the
-        // quarter: CI invariant_NonZeroTotal_ValidShareMap — 2 recipients against a snapshot count of 1).
+        // stands.
         bool usePrev;
         if (q == qt.activeQ) {
             usePrev = false;

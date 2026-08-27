@@ -15,9 +15,8 @@ import {ServiceRewardsActor} from "../../src/ServiceRewardsActor.sol";
 ///      values), so the propositions verified by this harness are all "parameter-independent properties"
 ///      (mathematical properties holding under any window config); absolute boundary membership depending on
 ///      concrete parameter values is covered by dynamic tests (see .ghost/references/015-sra-statemachine-verification.md §4 limitation 1).
-///      Note: the former freeze-interval determinations (_frozenAtPostEnd/_isFrozenAt) were removed in the
-///      mirror refactor — the E+POST exclusion is now a stored flag (frozenAtPostEnd), so no per-epoch
-///      interval-search function remains to verify; the E+POST semantics is covered by dynamic tests.
+///      The E+POST exclusion is a stored flag (frozenAtPostEnd) — there is no per-epoch
+///      interval-search function to verify; the E+POST semantics is covered by dynamic tests.
 contract QuarterWindowHarness is ServiceRewardsActor {
     constructor(address owner1, address owner2)
         ServiceRewardsActor(

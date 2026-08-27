@@ -29,7 +29,7 @@ library SraStorage {
         // current freeze state (0 = not frozen) for admission checks and freeze/unfreeze symmetry.
         bool frozenAtPostEnd; // 1B
         Epoch frozenSince; // current freeze state: 0 = not frozen; > 0 = frozen since this epoch — 8B
-        // 30B packed into slot0 (successor field removed — the id-keyed model needs no alias chain)
+        // 30B packed into slot0
         // Contribution slots (mirror): fpv = active-quarter contribution (0 = not posted),
         // prevFpv = previous-quarter contribution mirror, exclusion-fixed at mirror advance
         // (prevFpv <- frozenAtPostEnd ? 0 : fpv; fpv = 0). submitShares reads fpv for the

@@ -375,8 +375,7 @@ contract SRAAdversarial is SRATestBase {
     /// mirror-window guard.
     /// A write may skip a gap quarter (a quarter with no volume is necessarily
     /// unwritten — postVolume rejects zero). The mirror jumps in one step, keeping prevFpv =
-    /// activeQ-1's data (0 for a gap). Formerly rejected (deadlock: no way to advance past a
-    /// no-volume quarter).
+    /// activeQ-1's data (0 for a gap).
     function test_PostVolume_SkipsGapQuarter() public {
         address orch = makeAddr("orch");
         _admit(orch);
