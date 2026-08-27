@@ -43,10 +43,11 @@ contract DifferentialSharesHarness is ServiceRewardsActor {
     {
         // Public test entry keeps uint256 (the postVolume input form); wrap to FixedU18 (values are
         // already 18-decimal USD, no scaling) so the production _computeShares runs type-checked.
-        FixedU18[] memory f18 = new FixedU18[](usds.length);
+        Share[] memory shares = new Share[](usds.length);
         for (uint256 i = 0; i < usds.length; i++) {
-            f18[i] = FixedU18.wrap(usds[i]);
+            shares[i] = Share({wallet: wallets[i], share: FixedU18.wrap(usds[i])});
         }
-        return _computeShares(wallets, f18, count, FixedU18.wrap(total));
+        _computeShares(shares, count, FixedU18.wrap(total));
+        return shares;
     }
 }

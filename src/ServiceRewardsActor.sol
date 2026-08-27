@@ -629,8 +629,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
             qt.lastSubmittedQ = q + 1;
             return;
         }
-        address[] memory wallets = new address[](r.admittedIds.length);
-        FixedU18[] memory usds = new FixedU18[](r.admittedIds.length);
+        Share[] memory shares = new Share[](r.admittedIds.length);
         uint256 count = 0;
         // Sum over the collected entries (the current admitted ids) — self-consistent with the
         // collection. The quarter counter (totalUsd) is a binding snapshot that can outlive a
@@ -642,14 +641,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
             SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
             if (usePrev) {
                 if (o.prevFpv == ZERO) continue;
-                wallets[count] = o.wallet; // current effective wallet (replace re-points it)
-                usds[count] = o.prevFpv;
+                shares[count] = Share({wallet: o.wallet, share: o.prevFpv}); // current effective wallet (replace re-points it)
             } else {
                 if (o.frozenAtPostEnd || o.fpv == ZERO) continue;
-                wallets[count] = o.wallet;
-                usds[count] = o.fpv;
+                shares[count] = Share({wallet: o.wallet, share: o.fpv});
             }
-            total = total + usds[count];
+            total = total + shares[count].share;
             count++;
         }
 
@@ -660,7 +657,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
             return;
         }
 
-        Share[] memory shares = _computeShares(wallets, usds, count, total);
+        _computeShares(shares, count, total);
         // Trim zero-share entries: the largest-remainder method can floor a tiny usd to 0
         // when the residue top-up round count is smaller than the number of orchestrators.
         // Real f02 SetShares rejects share==0 entries (as does the mock), so drop them here.
@@ -756,24 +753,22 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // ------------------------------------------------------------------------
 
     /// @dev SplitRule share computation: floor + largest-remainder method (design §2.5.3, T1: remainder descending, first residue entries +1).
-    function _computeShares(address[] memory wallets, FixedU18[] memory usds, uint256 n, FixedU18 total)
-        internal
-        pure
-        returns (Share[] memory shares)
-    {
-        shares = new Share[](n);
+    ///      Writes the share field of each entry in place; the wallet field is filled by the caller.
+    function _computeShares(Share[] memory shares, uint256 n, FixedU18 total) internal pure {
         uint256[] memory remainders = new uint256[](n);
         bool[] memory bumped = new bool[](n);
         FixedU18 residue = SHARE_TOTAL;
         for (uint256 i = 0; i < n; i++) {
             // 18-decimal fixed-point: share = usd / total (divDown scales by 1e18 internally),
             // mathematically identical to usd × 1e18 / total — both operands are already 18-decimal.
-            FixedU18 shareF = usds[i] / total;
-            shares[i] = Share({wallet: wallets[i], share: shareF});
+            // Read the raw usd before overwriting: the remainder below must use the original
+            // value, not the floored share.
+            FixedU18 usd = shares[i].share;
+            shares[i].share = usd / total;
             // remainder = divDown's integer remainder (mul(usd, 1e18) mod total) — same relative
             // ordering as the pre-migration integer-USD formulation, so the largest-remainder
             // assignment order is bit-identical.
-            remainders[i] = FixedU18.unwrap(usds[i] % total);
+            remainders[i] = FixedU18.unwrap(usd % total);
             residue = residue - shares[i].share;
         }
         // Remainder descending: each round tops up +1 to the largest remaining remainder (n <= 64, O(n²) acceptable)
