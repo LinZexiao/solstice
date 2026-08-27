@@ -29,13 +29,17 @@ library SraStorage {
         // current freeze state (0 = not frozen) for admission checks and freeze/unfreeze symmetry.
         bool frozenAtPostEnd; // 1B
         Epoch frozenSince; // current freeze state: 0 = not frozen; > 0 = frozen since this epoch — 8B
-        // 4 fields pack into one 32B word (30B)
+        // word 0: the four fields above pack into one 32B word (30B)
         // Contribution slots (mirror): fpv = active-quarter contribution (0 = not posted),
         // prevFpv = previous-quarter contribution mirror, exclusion-fixed at mirror advance
         // (prevFpv <- frozenAtPostEnd ? 0 : fpv; fpv = 0). submitShares reads fpv for the
         // active quarter (q == activeQ) and prevFpv for the previous one (q == activeQ - 1).
         FixedU18 fpv; // word 1
         FixedU18 prevFpv; // word 2
+        // word 3 — position in admittedIds, the O(1) swap-remove bookkeeping (remove rewrites the
+        // swapped id's index; admit sets it at push). Stale after removal but never read: ids are
+        // allocated monotonically and never reused, so the removed id's slot is never consulted again.
+        uint64 admittedIndex; // 8B
     }
 
     /// @custom:storage-location erc7201:Solstice.SRA.Registry

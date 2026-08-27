@@ -386,6 +386,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.frozenAtPostEnd = false;
         o.fpv = ZERO;
         o.prevFpv = ZERO;
+        o.admittedIndex = uint64(r.admittedIds.length); // push position below; MAX_ORCHESTRATORS bounds it in uint64
         r.activeIdOf[orch] = id;
         r.admittedIds.push(id);
         emit OrchestratorAdmitted(orch);
@@ -804,13 +805,15 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     function _swapRemove(uint64[] storage list, uint64 id) internal {
+        SraStorage.SraStorageRegistry storage r = _registry();
+        uint64 idx = r.orchestrators[id].admittedIndex; // O(1): the id records its own list position (set at admit, rewritten on swap)
         uint256 n = list.length;
-        for (uint256 i = 0; i < n; i++) {
-            if (list[i] == id) {
-                list[i] = list[n - 1];
-                list.pop();
-                return;
-            }
+        uint64 lastId = list[n - 1];
+        if (id != lastId) {
+            list[idx] = lastId;
+            // swap double-write: the moved id's index must follow it, or the admittedIndex invariant breaks
+            r.orchestrators[lastId].admittedIndex = idx;
         }
+        list.pop();
     }
 }

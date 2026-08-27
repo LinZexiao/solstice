@@ -626,4 +626,115 @@ contract SRARegistryTest is SRATestBase {
         _admit(makeAddr("id-b"));
         assertEq(uint64(uint256(vm.load(address(sra), slot))), 4, "ids increase strictly");
     }
+
+    // ------------------------------------------------------------------------
+    // admittedIndex (O(1) removal bookkeeping) — raw ERC-7201 slot reads (no public getter)
+    // ------------------------------------------------------------------------
+
+    /// @dev admittedIds: uint64[] at REGISTRY_SLOT+4; elements packed 4 per 32B word (8B each), low-bytes first.
+    bytes32 internal constant ADMITTED_IDS_SLOT = bytes32(uint256(REGISTRY_SLOT) + 4);
+
+    function _admittedIdsLength() internal view returns (uint256 n) {
+        n = uint256(vm.load(address(sra), ADMITTED_IDS_SLOT));
+    }
+
+    function _admittedIdAt(uint256 i) internal view returns (uint64 id) {
+        bytes32 wordSlot = bytes32(uint256(keccak256(abi.encode(uint256(ADMITTED_IDS_SLOT)))) + i / 4);
+        id = uint64(uint256(vm.load(address(sra), wordSlot)) >> ((i % 4) * 64));
+    }
+
+    /// @dev orchestrators mapping at REGISTRY_SLOT; struct word 3 = admittedIndex (added after prevFpv).
+    function _admittedIndexOf(uint64 id) internal view returns (uint64 idx) {
+        bytes32 base = keccak256(abi.encode(uint64(id), REGISTRY_SLOT));
+        idx = uint64(uint256(vm.load(address(sra), bytes32(uint256(base) + 3))));
+    }
+
+    /// OrchestratorInfo invariant: every admitted id's admittedIndex == its position in admittedIds.
+    function _assertIndexConsistent() internal view {
+        uint256 n = _admittedIdsLength();
+        for (uint256 i = 0; i < n; i++) {
+            uint64 id = _admittedIdAt(i);
+            assertEq(_admittedIndexOf(id), i, "admittedIndex must equal array position");
+        }
+    }
+
+    /// O(1) removal core: removing a middle element swaps the last one into its slot — the swapped
+    /// element's admittedIndex must be rewritten to the new position (swap double-write).
+    function test_Remove_MiddleElement_SwapUpdatesIndex() public {
+        address a = makeAddr("mid-a");
+        address b = makeAddr("mid-b");
+        address c = makeAddr("mid-c");
+        _admit(a);
+        _admit(b);
+        _admit(c); // ids 1, 2, 3
+
+        _remove(b); // remove middle (id 2): list [1, 3] — id 3 swapped into position 1
+
+        assertEq(_admittedIdsLength(), 2);
+        assertEq(_admittedIdAt(0), 1);
+        assertEq(_admittedIdAt(1), 3, "last element swapped into removed slot");
+        assertEq(_admittedIndexOf(3), 1, "swapped element's admittedIndex rewritten");
+        assertEq(_admittedIndexOf(1), 0, "untouched element's admittedIndex intact");
+        _assertIndexConsistent();
+    }
+
+    /// Removing the last element: no swap; remaining indices unchanged.
+    function test_Remove_LastElement_IndexIntact() public {
+        address a = makeAddr("last-a");
+        address b = makeAddr("last-b");
+        _admit(a);
+        _admit(b); // ids 1, 2
+
+        _remove(b); // remove last (id 2): list [1]
+
+        assertEq(_admittedIdsLength(), 1);
+        assertEq(_admittedIdAt(0), 1);
+        assertEq(_admittedIndexOf(1), 0, "remaining element's index unchanged");
+        _assertIndexConsistent();
+    }
+
+    /// Multiple removals in sequence: the index invariant holds after every step (head/middle/last mixed).
+    function test_Remove_ConsecutiveRemoves_IndexAlwaysConsistent() public {
+        address a = makeAddr("seq-a");
+        address b = makeAddr("seq-b");
+        address c = makeAddr("seq-c");
+        address d = makeAddr("seq-d");
+        _admit(a);
+        _admit(b);
+        _admit(c);
+        _admit(d); // ids 1, 2, 3, 4
+
+        _remove(a); // head: list [4, 2, 3]
+        assertEq(_admittedIndexOf(4), 0, "head removal swaps last to front");
+        _assertIndexConsistent();
+
+        _remove(c); // middle: list [4, 2]
+        assertEq(_admittedIndexOf(2), 1, "middle removal swaps last to slot 1");
+        _assertIndexConsistent();
+
+        _remove(b); // last: list [4]
+        _assertIndexConsistent();
+
+        assertEq(_admittedIdsLength(), 1);
+        assertEq(_admittedIdAt(0), 4);
+    }
+
+    /// Re-admit after removal: the new id is pushed at list.length — its admittedIndex must be that position.
+    function test_Remove_ThenAdmit_NewAdmitGetsPushIndex() public {
+        address a = makeAddr("readmit-a");
+        address b = makeAddr("readmit-b");
+        _admit(a);
+        _admit(b); // ids 1, 2; list [1, 2]
+
+        _remove(a); // list [2] (length 1)
+
+        address c = makeAddr("readmit-c");
+        _admit(c); // id 3 pushed at position 1
+
+        assertEq(_admittedIdsLength(), 2);
+        assertEq(_admittedIdAt(0), 2);
+        assertEq(_admittedIdAt(1), 3);
+        assertEq(_admittedIndexOf(3), 1, "new admit's admittedIndex == push position (list.length)");
+        _assertIndexConsistent();
+    }
 }

@@ -39,6 +39,10 @@ import {SRATestBase} from "./SRATestBase.sol";
 ///     Hardcoded on the test side to read the approved bitmask (invariant I3).
 bytes32 constant PENDING_TASKS_SLOT = 0x635f64a8ec66823e68578973f5bc466fd4e0eadd655f760cfc91e860524aa300;
 
+/// @dev ERC-7201 Registry namespace slot (src/lib/SraStorage.sol) — read directly because the id list and
+///     the admittedIndex field are internal to the identity model (no public getter).
+bytes32 constant REGISTRY_SLOT = 0xb7fd4b054ced95f43476af93bf71636318271f9e64f7661dc52f0fb4c1a54400;
+
 /// @notice Invariant handler: encapsulates random operations and maintains "expected state" for invariant assertions.
 contract SRAInvariantHandler is SRATestBase {
     uint256 internal constant ORCH_POOL = 20;
@@ -713,6 +717,27 @@ contract SRAInvariantTest is Test {
             for (uint256 i = 0; i < shares.length; i++) {
                 assertGt(FixedU18.unwrap(shares[i].share), 0, "A3: trimmed map must contain only non-zero shares");
             }
+        }
+    }
+
+    /// I6 admittedIndex ↔ array position: every id in admittedIds has its orchestrators[id].admittedIndex ==
+    /// its position (the O(1) removal bookkeeping invariant). Reads raw ERC-7201 slots:
+    ///   admittedIds (uint64[] at REGISTRY_SLOT+4) elements are packed 4 per 32B word, low-bytes first;
+    ///   orchestrators[id] at keccak256(abi.encode(id, REGISTRY_SLOT)), admittedIndex = struct word 3.
+    /// Catches: swap double-write omission (a swapped id keeps its stale index), wrong index write on
+    ///        remove/admit, index drift under repeated remove + re-admit.
+    function invariant_AdmittedIndex_MatchesArrayPosition() public view {
+        ServiceRewardsActor sra = handler.sraInstance();
+        bytes32 lenSlot = bytes32(uint256(REGISTRY_SLOT) + 4);
+        uint256 n = uint256(vm.load(address(sra), lenSlot));
+        bytes32 elemBase = keccak256(abi.encode(uint256(REGISTRY_SLOT) + 4));
+        for (uint256 i = 0; i < n; i++) {
+            bytes32 wordSlot = bytes32(uint256(elemBase) + i / 4);
+            uint256 word = uint256(vm.load(address(sra), wordSlot));
+            uint64 id = uint64(word >> ((i % 4) * 64));
+            bytes32 base = keccak256(abi.encode(uint64(id), REGISTRY_SLOT));
+            uint64 idx = uint64(uint256(vm.load(address(sra), bytes32(uint256(base) + 3))));
+            assertEq(idx, i, "I6: admittedIndex must equal array position");
         }
     }
 }
