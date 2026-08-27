@@ -169,10 +169,11 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // deployment-time parameter validation, aligned with setPricingParams
         require(priceBand <= BASIS_POINTS, InvalidParameter());
         require(epochsPerQuarter > 0 && postPeriod > 0 && verificationWindow > 0, InvalidParameter());
-        // The mirror advances only forward, so the windows must not overlap — a quarter's
-        // verification window closing after the next quarter has begun would let a governance
-        // CorrectVolume target an already-advanced quarter, rewinding activeQ (uint256 intermediate
-        // guards the addition against overflow).
+        // The mirror advances only forward, so the verification window must close strictly before
+        // the next quarter begins — POST + VERIFY == EPOCHS would leave the window's last epoch
+        // inside the next quarter's mirror window (off-by-one dead zone: _inVerificationWindow
+        // allows the write while _assertMirrorWindow rejects it). uint256 intermediate guards the
+        // addition against overflow.
         require(uint256(postPeriod) + uint256(verificationWindow) < uint256(epochsPerQuarter), InvalidParameter());
 
         EPOCHS_PER_QUARTER = Epoch.wrap(epochsPerQuarter);

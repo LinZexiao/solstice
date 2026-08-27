@@ -353,16 +353,17 @@ contract SRAAdversarial is SRATestBase {
         );
     }
 
-    /// Constructor accepts the exact boundary: POST + VERIFY == EPOCHS (verification closes at the
-    /// next quarter's boundary — no overlap, the mirror stays forward-only).
-    function test_Ctor_WindowBoundary_Accepted() public {
-        // deployment succeeded (no revert) — the boundary POST + VERIFY == EPOCHS is accepted
+    /// Constructor rejects the exact boundary: POST + VERIFY == EPOCHS leaves the window's last
+    /// epoch inside the next quarter's mirror window — _inVerificationWindow allows the write
+    /// while _assertMirrorWindow rejects it (off-by-one dead zone), so the constraint is strict.
+    function test_Ctor_WindowBoundary_Rejected() public {
+        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
         new ServiceRewardsActor(
             owner1,
             owner2,
             700, // EPOCHS
             300, // POST
-            400, // VERIFY: 300 + 400 = 700 == EPOCHS -> accepted
+            400, // VERIFY: 300 + 400 = 700 == EPOCHS -> rejected (strict)
             SRA_CANCEL_HOLD,
             ACTIVATION_EPOCH,
             MIN_LOT,
