@@ -171,9 +171,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         require(epochsPerQuarter > 0 && postPeriod > 0 && verificationWindow > 0, InvalidParameter());
         // The mirror advances only forward, so the verification window must close strictly before
         // the next quarter begins — POST + VERIFY == EPOCHS would leave the window's last epoch
-        // inside the next quarter's mirror window (off-by-one dead zone: _inVerificationWindow
-        // allows the write while _assertMirrorWindow rejects it). uint256 intermediate guards the
-        // addition against overflow.
+        // inside the next quarter's mirror window (off-by-one dead zone: a write in that epoch
+        // would target a quarter the mirror has already advanced past). uint256 intermediate
+        // guards the addition against overflow.
         require(uint256(postPeriod) + uint256(verificationWindow) < uint256(epochsPerQuarter), InvalidParameter());
 
         EPOCHS_PER_QUARTER = Epoch.wrap(epochsPerQuarter);
@@ -278,17 +278,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         if (qt.activeQ < nowQ) _advanceMirror(qt, nowQ);
     }
 
-    /// @dev Mirror advance guard: writes are forward-only. q < activeQ would rewind the mirror
-    ///      (backing up and clearing a later quarter's contributions — possible when the windows
-    ///      overlap, hence also forbidden at the constructor). q > activeQ (skipping one or more
-    ///      quarters with no writes) is allowed: a quarter with no volume is necessarily unwritten
-    ///      (postVolume rejects zero), and _advanceMirror jumps in one step, keeping
-    ///      prevFpv = activeQ-1's data (0 for a gap quarter). The window checks bound q above
-    ///      (can't write the far future); this guard only rejects rewinds.
-    function _assertMirrorWindow(SraStorage.SraStorageQuarter storage qt, uint64 q) internal view {
-        require(q >= qt.activeQ, InvalidParameter());
-    }
-
     /// @dev Mirror advance: the first write of a new quarter (postVolume or correctVolume
     ///      with q != activeQ) backs the previous active-quarter contributions up into the previous-
     ///      quarter mirror — exclusion-fixed (frozenAtPostEnd ? 0 : fpv), because the freeze state
@@ -359,10 +348,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         SraStorage.SraStorageQuarter storage qt = _quarter();
 
         // Time-correct the mirror cache first (a gap quarter advances on the clock, not on
-        // writes), then validate the write target against the corrected cache.
+        // writes): the window checks bound q to the current time quarter, and _syncMirror
+        // advances activeQ to it, so the write target is the active quarter.
         _syncMirror(qt);
-        _assertMirrorWindow(qt, q);
-        if (qt.activeQ != q) _advanceMirror(qt, q);
         require(o.fpv == ZERO, AlreadyPosted(q));
         o.fpv = fpv; // FixedU18 — 18-decimal USD, type-checked from the entry
         qt.totalUsd[q] = qt.totalUsd[q] + fpv;
@@ -577,13 +565,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
         SraStorage.SraStorageQuarter storage qt = _quarter();
 
-        // Time-correct the mirror cache first (gap quarters advance on the clock), then
-        // validate the write target against the corrected cache. correctVolume
-        // can be the first writer of a quarter (supplying recomputed figures for a quarter nobody
-        // posted); the advance backs the previous quarter's data up into prevFpv.
+        // Time-correct the mirror cache first (gap quarters advance on the clock, not on
+        // writes): the window checks bound q to the current time quarter, and _syncMirror
+        // advances activeQ to it — correctVolume can be the first writer of a quarter
+        // (supplying recomputed figures for a quarter nobody posted); the sync's advance backs
+        // the previous quarter's data up into prevFpv.
         _syncMirror(qt);
-        _assertMirrorWindow(qt, q);
-        if (qt.activeQ != q) _advanceMirror(qt, q);
 
         // Read the old value *after* the advance: on an advance the previous
         // quarter's fpv has already been backed up into prevFpv and fpv cleared, so oldUsd = 0
