@@ -758,7 +758,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      Writes the share field of each entry in place; the wallet field is filled by the caller.
     function _computeShares(Share[] memory shares, uint256 n, FixedU18 total) internal pure {
         uint256[] memory remainders = new uint256[](n);
-        bool[] memory bumped = new bool[](n);
         FixedU18 residue = SHARE_TOTAL;
         for (uint256 i = 0; i < n; i++) {
             // 18-decimal fixed-point: share = usd / total (divDown scales by 1e18 internally),
@@ -773,19 +772,64 @@ contract ServiceRewardsActor is UnanimousGovernance {
             remainders[i] = FixedU18.unwrap(usd % total);
             residue = residue - shares[i].share;
         }
-        // Remainder descending: each round tops up +1 to the largest remaining remainder (n <= 64, O(n²) acceptable)
-        for (uint256 r = 0; r < FixedU18.unwrap(residue); r++) {
-            uint256 best = type(uint256).max;
-            uint256 bestRem = 0;
-            for (uint256 i = 0; i < n; i++) {
-                if (!bumped[i] && remainders[i] > bestRem) {
-                    bestRem = remainders[i];
-                    best = i;
-                }
-            }
-            bumped[best] = true;
-            shares[best].share = shares[best].share + FixedU18.wrap(1);
+        // Largest-remainder top-up: "each round pick the largest un-picked remainder, ties to the
+        // lowest index" is exactly "take the first residue entries of the (remainder desc, index
+        // asc) order". Sorting once (O(n log n)) replaces residue rounds of O(n) scanning
+        // (O(n × residue), quadratic in the worst case). MAX_ORCHESTRATORS is a FIP-0118 L1
+        // protocol cap that can be amended; the sort keeps cost growth in check if it is raised.
+        uint256[] memory order = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            order[i] = i;
         }
+        _mergeSortByRemainder(order, remainders);
+        for (uint256 r = 0; r < FixedU18.unwrap(residue); r++) {
+            shares[order[r]].share = shares[order[r]].share + FixedU18.wrap(1);
+        }
+    }
+
+    /// @dev Stable merge sort of order[] by (remainder desc, index asc) — O(n log n).
+    ///      Stability is required: equal remainders must top up in input order (lowest index
+    ///      first) to match the per-round pick. Merge is the minimal stable O(n log n) sort;
+    ///      insertion/selection stay O(n²) and would re-introduce the quadratic behavior.
+    function _mergeSortByRemainder(uint256[] memory order, uint256[] memory remainders) private pure {
+        uint256 n = order.length;
+        if (n < 2) return;
+        uint256[] memory buf = new uint256[](n);
+        _mergeSortByRemainderRec(order, remainders, buf, 0, n);
+    }
+
+    function _mergeSortByRemainderRec(
+        uint256[] memory order,
+        uint256[] memory remainders,
+        uint256[] memory buf,
+        uint256 lo,
+        uint256 hi
+    ) private pure {
+        if (hi - lo < 2) return;
+        uint256 mid = (lo + hi) / 2;
+        _mergeSortByRemainderRec(order, remainders, buf, lo, mid);
+        _mergeSortByRemainderRec(order, remainders, buf, mid, hi);
+        uint256 i = lo;
+        uint256 j = mid;
+        uint256 k = lo;
+        while (i < mid && j < hi) {
+            if (_remainderBefore(order[i], order[j], remainders)) {
+                buf[k++] = order[i++];
+            } else {
+                buf[k++] = order[j++];
+            }
+        }
+        while (i < mid) buf[k++] = order[i++];
+        while (j < hi) buf[k++] = order[j++];
+        for (k = lo; k < hi; k++) {
+            order[k] = buf[k];
+        }
+    }
+
+    /// @dev True when a must sort before b: strictly larger remainder, or equal remainder with a smaller index.
+    function _remainderBefore(uint256 a, uint256 b, uint256[] memory remainders) private pure returns (bool) {
+        if (remainders[a] != remainders[b]) return remainders[a] > remainders[b];
+        return a < b;
     }
 
     /// @dev Resolves the current admitted id for an address; reverts NotAdmitted when unregistered/removed.
