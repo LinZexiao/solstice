@@ -173,7 +173,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // verification window closing after the next quarter has begun would let a governance
         // CorrectVolume target an already-advanced quarter, rewinding activeQ (uint256 intermediate
         // guards the addition against overflow).
-        require(uint256(postPeriod) + uint256(verificationWindow) <= uint256(epochsPerQuarter), InvalidParameter());
+        require(uint256(postPeriod) + uint256(verificationWindow) < uint256(epochsPerQuarter), InvalidParameter());
 
         EPOCHS_PER_QUARTER = Epoch.wrap(epochsPerQuarter);
         POST_PERIOD = Epoch.wrap(postPeriod);
