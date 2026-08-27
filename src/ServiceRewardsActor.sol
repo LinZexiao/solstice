@@ -674,11 +674,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
             if (shares[i].share > 0) shares[kept++] = shares[i];
         }
         if (kept < shares.length) {
-            Share[] memory trimmed = new Share[](kept);
-            for (uint256 i = 0; i < kept; i++) {
-                trimmed[i] = shares[i];
+            assembly ("memory-safe") {
+                mstore(shares, kept)
             }
-            shares = trimmed;
         }
 
         qt.lastSubmittedQ = q + 1; // CEI: mark before the external call
