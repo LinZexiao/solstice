@@ -42,7 +42,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
 
     /// Three equal usd values split 3 ways: all remainders equal (1), residue 1
     /// -> the single top-up goes to the lowest index.
-    function test_TieBreak_EqualRemainders_LowestIndex() public {
+    function test_TieBreak_EqualRemainders_LowestIndex() public view {
         uint256[] memory usds = new uint256[](3);
         usds[0] = 1;
         usds[1] = 1;
@@ -55,7 +55,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
 
     /// Two equal max remainders (index 0, 1), residue 2 -> both top up, in index
     /// ascending order (not descending, not the later index first).
-    function test_TieBreak_MultiRound_IndexAscending() public {
+    function test_TieBreak_MultiRound_IndexAscending() public view {
         uint256[] memory usds = new uint256[](3);
         usds[0] = 1;
         usds[1] = 1;
@@ -71,7 +71,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// Max remainder at the last index -> the last index receives the top-up.
-    function test_MaxRemainder_LastIndex() public {
+    function test_MaxRemainder_LastIndex() public view {
         uint256[] memory usds = new uint256[](3);
         usds[0] = 1;
         usds[1] = 2;
@@ -83,7 +83,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
     }
 
     /// Max remainder at the first index -> the first index receives the top-up.
-    function test_MaxRemainder_FirstIndex() public {
+    function test_MaxRemainder_FirstIndex() public view {
         uint256[] memory usds = new uint256[](3);
         usds[0] = 4;
         usds[1] = 1;
@@ -99,7 +99,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// n = 1: single orchestrator takes the whole share, no top-up.
-    function test_SingleOrchestrator_NoTopUp() public {
+    function test_SingleOrchestrator_NoTopUp() public view {
         uint256[] memory usds = new uint256[](1);
         usds[0] = 5;
         Share[] memory shares = _compute(usds, 5);
@@ -107,7 +107,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
     }
 
     /// n = 2: top-up goes to the larger remainder (index 1).
-    function test_TwoOrchestrators() public {
+    function test_TwoOrchestrators() public view {
         uint256[] memory usds = new uint256[](2);
         usds[0] = 1;
         usds[1] = 2;
@@ -118,7 +118,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
 
     /// n = 64 (MAX_ORCHESTRATORS): 63 equal usds (remainder 40) + 1 double
     /// (remainder 15), residue 39 -> 39 top-ups land on the 39 lowest indices.
-    function test_SixtyFour_ProtocolBoundary_TopUpsInOrder() public {
+    function test_SixtyFour_ProtocolBoundary_TopUpsInOrder() public view {
         uint256[] memory usds = new uint256[](64);
         for (uint256 i = 0; i < 63; i++) {
             usds[i] = 1;
@@ -138,7 +138,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
     // helpers
     // ------------------------------------------------------------------------
 
-    function _compute(uint256[] memory usds, uint256 total) internal returns (Share[] memory) {
+    function _compute(uint256[] memory usds, uint256 total) internal view returns (Share[] memory) {
         uint256 n = usds.length;
         address[] memory wallets = new address[](n);
         for (uint256 i = 0; i < n; i++) {
