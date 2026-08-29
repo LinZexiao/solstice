@@ -32,7 +32,7 @@ import {Test} from "forge-std/Test.sol";
 import {Share} from "../src/lib/FVMRewardTypes.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
-import {Pair} from "../src/lib/SraTypes.sol";
+import {Binding} from "../src/lib/SraTypes.sol";
 import {SRATestBase} from "./SRATestBase.sol";
 
 /// @dev ERC-7201 storage slot of PendingTask (see src/lib/PendingTask.sol: Solstice.PendingTasks).
@@ -266,8 +266,8 @@ contract SRAInvariantHandler is SRATestBase {
         if (!sra.isAdmitted(orch) || sra.isFrozen(orch)) return;
         (address payer, address operator) = _pickPair(pairIdx);
         if (!_claimable(orch, payer, operator)) return;
-        Pair[] memory pairs = new Pair[](1);
-        pairs[0] = Pair({payer: payer, operator: operator});
+        Binding[] memory pairs = new Binding[](1);
+        pairs[0] = Binding({payer: payer, operator: operator});
         vm.prank(orch);
         sra.registerPairs(pairs);
         _setBound(payer, operator, orch);

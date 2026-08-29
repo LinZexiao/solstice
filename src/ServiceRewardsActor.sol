@@ -10,7 +10,7 @@ pragma solidity ^0.8.36;
 //       export AggregatedFPV(Q) for the SWA. The SRA never receives or holds value.
 //
 // Basis: docs/sra-design.md (design, tests, decisions, security review; C1-C8 conflict rulings)
-//   - C1: registerPairs uses a named struct Pair[] (inline tuple-array params are illegal in Solidity)
+//   - C1: registerPairs uses a named struct Binding[] (inline tuple-array params are illegal in Solidity)
 //   - T1: largest-remainder method per design §2.5.3 (remainder descending, first residue entries +1)
 //   - Identity: a uint64 id is the orchestrator identity; an address is only the current wallet mapping
 //     (activeIdOf). bindings/fpv/freeze state key on the id, so replace = O(1) wallet re-point and
@@ -35,10 +35,10 @@ import {Share} from "./lib/FVMRewardTypes.sol";
 import {OwnersLibrary} from "./lib/Owners.sol";
 import {UnanimousGovernance} from "./lib/UnanimousGovernance.sol";
 import {IsASafe} from "./lib/IsASafe.sol";
-// Top-level SRA types (Pair / FPV) and the ERC-7201 storage layout live in
+// Top-level SRA types (Binding / FPV) and the ERC-7201 storage layout live in
 // separate library files (SraTypes.sol / SraStorage.sol) — extracted to simplify
 // the #5 proxy refactor; test files import the types from SraTypes.sol.
-import {Pair, FPV} from "./lib/SraTypes.sol";
+import {Binding, FPV} from "./lib/SraTypes.sol";
 import {SraStorage} from "./lib/SraStorage.sol";
 
 contract ServiceRewardsActor is UnanimousGovernance {
@@ -312,8 +312,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // ------------------------------------------------------------------------
 
     /// @notice An admitted, non-frozen orchestrator declares binding pairs; reverts if the pair is already bound to another (uniqueness, spec §3.3).
-    /// @dev C1: parameter uses a named struct Pair[] (inline tuple-array params are illegal in Solidity).
-    function registerPairs(Pair[] calldata pairs) external {
+    /// @dev C1: parameter uses a named struct Binding[] (inline tuple-array params are illegal in Solidity).
+    function registerPairs(Binding[] calldata pairs) external {
         require(pairs.length <= MAX_PAIRS, TooManyPairs()); // batch bound
         // single storage pointer — avoids hashing the orchestrators mapping twice
         SraStorage.SraStorageRegistry storage r = _registry();

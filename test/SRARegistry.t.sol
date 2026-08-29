@@ -13,7 +13,7 @@ pragma solidity ^0.8.36;
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
-import {Pair, FPV} from "../src/lib/SraTypes.sol";
+import {Binding, FPV} from "../src/lib/SraTypes.sol";
 
 /// @dev ERC-7201 Registry namespace slot (src/lib/SraStorage.sol) — the id allocator lives at
 ///      REGISTRY_SLOT + 3 (low 64 bits = nextId). The test reads it directly because the id is
@@ -89,7 +89,7 @@ contract SRARegistryTest is SRATestBase {
         address orch = makeAddr("orch");
         _admit(orch);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
 
         _registerPairsAs(orch, pairs);
@@ -99,7 +99,7 @@ contract SRARegistryTest is SRATestBase {
     /// Strategy 3: a non-admitted address cannot registerPairs.
     function test_RegisterPairs_NotAdmitted_Reverts() public {
         address stranger = makeAddr("stranger");
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
 
         vm.prank(stranger);
@@ -113,7 +113,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(orch);
         _freeze(orch);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
 
         vm.prank(orch);
@@ -128,7 +128,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(orchA);
         _admit(orchB);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(orchA, pairs);
 
@@ -142,7 +142,7 @@ contract SRARegistryTest is SRATestBase {
         address orch = makeAddr("orch");
         _admit(orch);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(orch, pairs);
 
@@ -156,7 +156,7 @@ contract SRARegistryTest is SRATestBase {
         address orch = makeAddr("orch");
         _admit(orch);
 
-        Pair[] memory pairs = new Pair[](65);
+        Binding[] memory pairs = new Binding[](65);
         for (uint256 i = 0; i < pairs.length; i++) {
             pairs[i] =
                 _pair(makeAddr(string.concat("payer", vm.toString(i))), makeAddr(string.concat("op", vm.toString(i))));
@@ -172,7 +172,7 @@ contract SRARegistryTest is SRATestBase {
         address orch = makeAddr("orch");
         _admit(orch);
 
-        Pair[] memory pairs = new Pair[](64);
+        Binding[] memory pairs = new Binding[](64);
         for (uint256 i = 0; i < pairs.length; i++) {
             pairs[i] =
                 _pair(makeAddr(string.concat("payer", vm.toString(i))), makeAddr(string.concat("op", vm.toString(i))));
@@ -189,7 +189,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(orchA);
         _admit(orchB);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(orchA, pairs);
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchA);
@@ -256,7 +256,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(orch);
         _freeze(orch);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         vm.prank(orch);
         vm.expectRevert();
@@ -282,7 +282,7 @@ contract SRARegistryTest is SRATestBase {
         address newOrch = makeAddr("newOrch");
         _admit(oldOrch);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(oldOrch, pairs);
 
@@ -310,7 +310,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(orchA);
         _admit(orchC); // a third party must be admitted to reach the AlreadyBound check (registerPairs gating)
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(orchA, pairs);
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchA);
@@ -341,7 +341,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(orchA);
         _admit(orchB);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(orchA, pairs);
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchA);
@@ -383,7 +383,7 @@ contract SRARegistryTest is SRATestBase {
         address orchA = makeAddr("orchA");
         _admit(orchA);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(orchA, pairs);
 
@@ -583,7 +583,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(oldOrch);
         _admit(third);
 
-        Pair[] memory pairs = new Pair[](1);
+        Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(oldOrch, pairs);
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), oldOrch);

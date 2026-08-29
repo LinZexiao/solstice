@@ -24,7 +24,7 @@ import {WAD} from "./mocks/FVMRewardActor.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
-import {Pair} from "../src/lib/SraTypes.sol";
+import {Binding} from "../src/lib/SraTypes.sol";
 import {Share, WeightRecord} from "../src/lib/FVMRewardTypes.sol";
 import {FVMRewards} from "../src/lib/FVMRewards.sol";
 import {SWA_TIMELOCK} from "../src/lib/FVMRewardMethod.sol";
@@ -32,8 +32,8 @@ import {SWA_TIMELOCK} from "../src/lib/FVMRewardMethod.sol";
 /// @notice Common test base: deploys the SRA, builds Safe owners, registers service stream 2, quarterly time utilities.
 /// @dev ⚠️ Conflict record: the design's §2.3.1 registerPairs signature `(address payer, address operator)[]`
 /// inline tuple arrays are illegal in Solidity 0.8.36 ("Expected type name") — this test uses ServiceRewardsActor's
-/// named struct `Pair` instead (field names payer/operator match the design; ABI encoding is still a tuple array).
-/// The coder should implement SRA with `registerPairs(Pair[] calldata pairs)` or an equivalent named struct.
+/// named struct `Binding` instead (field names payer/operator match the design; ABI encoding is still a tuple array).
+/// The coder should implement SRA with `registerPairs(Binding[] calldata pairs)` or an equivalent named struct.
 contract SRATestBase is MockRewardTest {
     ServiceRewardsActor internal sra;
     address internal owner1;
@@ -139,8 +139,8 @@ contract SRATestBase is MockRewardTest {
         return usd;
     }
 
-    function _pair(address payer, address operator) internal pure returns (Pair memory) {
-        return Pair({payer: payer, operator: operator});
+    function _pair(address payer, address operator) internal pure returns (Binding memory) {
+        return Binding({payer: payer, operator: operator});
     }
 
     // ------------------------------------------------------------------------
@@ -200,7 +200,7 @@ contract SRATestBase is MockRewardTest {
     }
 
     /// @notice registers binding pairs as the orchestrator within quarter q's posting window.
-    function _registerPairsAs(address orch, Pair[] memory pairs) internal {
+    function _registerPairsAs(address orch, Binding[] memory pairs) internal {
         vm.prank(orch);
         sra.registerPairs(pairs);
     }

@@ -25,7 +25,7 @@ pragma solidity ^0.8.36;
 import {Share} from "../src/lib/FVMRewardTypes.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
-import {Pair} from "../src/lib/SraTypes.sol";
+import {Binding} from "../src/lib/SraTypes.sol";
 import {IsASafe} from "../src/lib/IsASafe.sol";
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
@@ -186,8 +186,8 @@ contract SRAAdversarial is SRATestBase {
         address operator = makeAddr("op");
         _admit(orch);
 
-        Pair[] memory pairs = new Pair[](1);
-        pairs[0] = Pair({payer: address(0), operator: operator});
+        Binding[] memory pairs = new Binding[](1);
+        pairs[0] = Binding({payer: address(0), operator: operator});
         _registerPairsAs(orch, pairs);
         assertEq(sra.bindingOf(address(0), operator), orch);
     }
@@ -269,7 +269,7 @@ contract SRAAdversarial is SRATestBase {
         address orch = makeAddr("orch");
         _admit(orch);
 
-        Pair[] memory empty = new Pair[](0);
+        Binding[] memory empty = new Binding[](0);
         _registerPairsAs(orch, empty);
         assertEq(sra.admittedCount(), 1); // state unchanged
     }
