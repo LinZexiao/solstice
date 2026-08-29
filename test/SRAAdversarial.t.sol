@@ -274,8 +274,9 @@ contract SRAAdversarial is SRATestBase {
         assertEq(sra.admittedCount(), 1); // state unchanged
     }
 
-    /// setAdmittedLists with two empty arrays clears both allowlists (exclusive-update semantics).
-    function test_SetAdmittedLists_EmptyArrays_ClearAllowlists() public {
+    /// setAdmittedLists is event-only (snapshot semantics): the executed call emits
+    /// AdmittedListsUpdated carrying the full arrays; empty arrays emit an empty snapshot.
+    function test_SetAdmittedLists_EmitsFullArrays() public {
         address token = makeAddr("usdc");
         address payContract = makeAddr("pay");
 
@@ -289,8 +290,9 @@ contract SRAAdversarial is SRATestBase {
         vm.prank(owner2);
         sra.setAdmittedLists(tokens, payContracts);
         vm.roll(block.number + SRA_CANCEL_HOLD);
+        vm.expectEmit(false, false, false, true, address(sra));
+        emit ServiceRewardsActor.AdmittedListsUpdated(tokens, payContracts);
         sra.setAdmittedLists(tokens, payContracts);
-        assertTrue(sra.isStablecoinAdmitted(token));
 
         // clear with empty arrays (the Filecoin Pay side has no public query;
         // the stablecoin side is observable and the two clears share one path)
@@ -300,8 +302,9 @@ contract SRAAdversarial is SRATestBase {
         vm.prank(owner2);
         sra.setAdmittedLists(empty, empty);
         vm.roll(block.number + SRA_CANCEL_HOLD);
+        vm.expectEmit(false, false, false, true, address(sra));
+        emit ServiceRewardsActor.AdmittedListsUpdated(empty, empty);
         sra.setAdmittedLists(empty, empty);
-        assertFalse(sra.isStablecoinAdmitted(token));
     }
 
     // ------------------------------------------------------------------------

@@ -13,6 +13,7 @@ pragma solidity ^0.8.36;
 // ============================================================================
 
 import {SRATestBase} from "./SRATestBase.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
@@ -183,11 +184,13 @@ contract SRAGovernanceTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// Strategy 6/I2: different setAdmittedLists array orders -> different calldata -> different taskIds
-    /// -> the two Safes approve different tasks, each with only one vote; the change does not take effect (task deadlock risk).
+    /// -> the two Safes approve different tasks, each with only one vote; the change does not take effect
+    /// (task deadlock risk). With the allowlist event-only, "not taking effect" = no AdmittedListsUpdated emitted.
     function test_TaskId_DifferentArrayOrder_DoesNotMerge() public {
         address usdc = makeAddr("usdc");
         address usdt = makeAddr("usdt");
 
+        vm.recordLogs();
         vm.prank(owner1);
         sra.setAdmittedLists(_asArray(usdc, usdt), _asArray(address(0), address(0)));
         vm.prank(owner2);
@@ -196,8 +199,10 @@ contract SRAGovernanceTest is SRATestBase {
 
         // the two votes are spread across two different tasks, each unable to reach a full vote -> the change never takes effect (I2 deadlock)
         vm.roll(block.number + SRA_CANCEL_HOLD + 1000);
-        assertFalse(sra.isStablecoinAdmitted(usdc));
-        assertFalse(sra.isStablecoinAdmitted(usdt));
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; i++) {
+            assertTrue(logs[i].topics[0] != ServiceRewardsActor.AdmittedListsUpdated.selector, "no AdmittedListsUpdated emitted");
+        }
     }
 
     /// Strategy 6/I2 control: same order (same calldata) -> two votes + hold -> execution takes effect.
@@ -211,11 +216,11 @@ contract SRAGovernanceTest is SRATestBase {
         sra.setAdmittedLists(stablecoins, _asArray(address(0), address(0)));
 
         vm.roll(block.number + SRA_CANCEL_HOLD);
+        // execution succeeded: the executing call emits the full-array snapshot (event-only allowlist,
+        // exclusive update — the emitted arrays are the authoritative new allowlist).
+        vm.expectEmit(false, false, false, true, address(sra));
+        emit ServiceRewardsActor.AdmittedListsUpdated(stablecoins, _asArray(address(0), address(0)));
         sra.setAdmittedLists(stablecoins, _asArray(address(0), address(0)));
-
-        // execution succeeded: no revert means the allowlist update took effect (setAdmittedLists is an exclusive update).
-        // verified via the isStablecoinAdmitted read-only view (design §2.3.5 supplementary view).
-        assertTrue(sra.isStablecoinAdmitted(usdc));
     }
 
     // ------------------------------------------------------------------------

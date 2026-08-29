@@ -24,8 +24,9 @@ pragma solidity ^0.8.36;
 //     fixed from the verification window onward) + frozenSince (current freeze state); at the mirror
 //     advance the flag is snapshotted into prevFpv (prevFpv <- frozenAtPostEnd ? 0 : fpv)
 //
-// Storage: 4 ERC-7201 namespaces (Registry/AdmittedLists/Quarter/Params),
+// Storage: 3 ERC-7201 namespaces (Registry/Quarter/Params),
 //       reusing Solstice.Owners (dual Safe) and Solstice.PendingTasks (governance queue).
+//       The allowlists are event-only (AdmittedListsUpdated is the authoritative snapshot).
 // ============================================================================
 
 import {Epoch, currentEpoch} from "./lib/Epoch.sol";
@@ -94,10 +95,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         return SraStorage.registry();
     }
 
-    function _lists() internal pure returns (SraStorage.SraStorageLists storage l) {
-        return SraStorage.lists();
-    }
-
     function _quarter() internal pure returns (SraStorage.SraStorageQuarter storage q) {
         return SraStorage.quarter();
     }
@@ -117,7 +114,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     event OrchestratorReplaced(address indexed oldOrchestrator, address indexed newOrchestrator);
     event BindingDeclared(address indexed payer, address indexed operator, address indexed orchestrator);
     event BindingReassigned(address indexed payer, address indexed operator, address indexed orchestrator);
-    event AdmittedListsUpdated(uint256 stablecoinCount, uint256 filecoinPayCount);
+    event AdmittedListsUpdated(address[] stablecoins, address[] filecoinPayContracts);
     event PricingParamsUpdated(uint256 minLot, uint256 priceBand);
     event VolumePosted(uint64 indexed q, address indexed orchestrator);
     event VolumeCorrected(uint64 indexed q, address indexed orchestrator);
@@ -260,7 +257,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         } else {
             return (false, 0); // genesis: nothing bound yet
         }
-        if (qt.lastSubmittedQ != latest + 1) return (true, latest);
+        if (qt.nextQuarter != latest + 1) return (true, latest);
         return (false, 0);
     }
 
@@ -283,7 +280,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      ownership) aligned with the clock so no time judgment ever reads a stale cache.
     function _syncMirror(SraStorage.SraStorageQuarter storage qt) internal {
         uint64 nowQ = _quarterOf(currentEpoch());
-        if (qt.activeQ < nowQ) _advanceMirror(qt, nowQ);
+        if (qt.activeQuarter < nowQ) _advanceMirror(qt, nowQ);
     }
 
     /// @dev Mirror advance: the first write of a new quarter (postVolume or correctVolume
@@ -297,14 +294,14 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      once the gap quarter has bound — NotLatestQuarter). O(n) per write regardless of gap size.
     function _advanceMirror(SraStorage.SraStorageQuarter storage qt, uint64 q) internal {
         SraStorage.SraStorageRegistry storage r = _registry();
-        bool adjacent = q == qt.activeQ + 1;
+        bool adjacent = q == qt.activeQuarter + 1;
         for (uint256 i = 0; i < r.admittedIds.length; i++) {
             SraStorage.OrchestratorInfo storage o = r.orchestrators[r.admittedIds[i]];
             o.prevFpv = adjacent ? (o.frozenAtPostEnd ? ZERO : o.fpv) : ZERO;
             o.fpv = ZERO;
             o.frozenAtPostEnd = false; // new quarter: E+POST not reached, nothing frozen yet
         }
-        qt.activeQ = q;
+        qt.activeQuarter = q;
     }
 
     // ------------------------------------------------------------------------
@@ -418,7 +415,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // a later removal must not rewrite it. The boundary is binding (not E+POST — freeze's
         // boundary): unlike freeze, removal drops the orchestrator from the admitted list, so the
         // map and the aggregate must exclude it together for every pre-binding removal.
-        uint64 q = _quarter().activeQ;
+        uint64 q = _quarter().activeQuarter;
         if (!_afterBinding(q) && !o.frozenAtPostEnd && o.fpv > ZERO) {
             _quarter().totalUsd[q] = _quarter().totalUsd[q] - o.fpv;
         }
@@ -441,7 +438,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.frozenSince = nowE;
         // fpv-effectiveness: a freeze before the posting window closes excludes the active
         // quarter (E+POST snapshot); from the verification window onward the quarter is fixed.
-        uint64 q = _quarter().activeQ;
+        uint64 q = _quarter().activeQuarter;
         if (nowE <= _qEnd(q) + POST_PERIOD && o.fpv > ZERO) {
             _quarter().totalUsd[q] = _quarter().totalUsd[q] - o.fpv; // fpv retained as unfreeze restore source
             o.frozenAtPostEnd = true;
@@ -460,7 +457,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.frozenSince = Epoch.wrap(0);
         // Symmetric with freeze: an unfreeze before the posting window closes re-includes the
         // active-quarter contribution (if posted); from the verification window onward it is fixed.
-        uint64 q = _quarter().activeQ;
+        uint64 q = _quarter().activeQuarter;
         if (nowE <= _qEnd(q) + POST_PERIOD && o.fpv > ZERO) {
             _quarter().totalUsd[q] = _quarter().totalUsd[q] + o.fpv;
             o.frozenAtPostEnd = false;
@@ -504,32 +501,16 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     /// @notice Updates the stablecoin + Filecoin Pay allowlists (exclusive update, spec §4.2).
-    /// @dev Array parameters require normalization (only same-order calldata yields an identical taskId).
+    /// @dev Event-only: the allowlists are not stored on-chain; AdmittedListsUpdated carries the
+    ///      full arrays (snapshot semantics) and is the sole authoritative record. Each call's
+    ///      array parameters replace the entire allowlist (exclusive update). Array parameters
+    ///      require normalization (only same-order calldata yields an identical taskId).
     function setAdmittedLists(address[] calldata stablecoins, address[] calldata filecoinPayContracts)
         external
         unanimous(keccak256(msg.data), SRA_CANCEL_HOLD)
     {
         require(stablecoins.length <= MAX_ALLOWLIST && filecoinPayContracts.length <= MAX_ALLOWLIST, InvalidParameter());
-        SraStorage.SraStorageLists storage l = _lists();
-        // Clear old entries
-        for (uint256 i = 0; i < l.stablecoinList.length; i++) {
-            delete l.stablecoins[l.stablecoinList[i]];
-        }
-        for (uint256 i = 0; i < l.filecoinPayList.length; i++) {
-            delete l.filecoinPayContracts[l.filecoinPayList[i]];
-        }
-        // Write new entries
-        delete l.stablecoinList;
-        delete l.filecoinPayList;
-        for (uint256 i = 0; i < stablecoins.length; i++) {
-            l.stablecoins[stablecoins[i]] = true;
-            l.stablecoinList.push(stablecoins[i]);
-        }
-        for (uint256 i = 0; i < filecoinPayContracts.length; i++) {
-            l.filecoinPayContracts[filecoinPayContracts[i]] = true;
-            l.filecoinPayList.push(filecoinPayContracts[i]);
-        }
-        emit AdmittedListsUpdated(stablecoins.length, filecoinPayContracts.length);
+        emit AdmittedListsUpdated(stablecoins, filecoinPayContracts);
     }
 
     /// @notice Updates the FIL pricing parameters MIN_LOT/PRICE_BAND (spec §3.3/§5.2).
@@ -614,7 +595,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
         SraStorage.SraStorageRegistry storage r = _registry();
         SraStorage.SraStorageQuarter storage qt = _quarter();
-        require(q + 1 != qt.lastSubmittedQ, AlreadySubmitted(q));
+        require(q + 1 != qt.nextQuarter, AlreadySubmitted(q));
 
         // q is the latest bound quarter. The mirror has advanced only as far as the last written
         // quarter (activeQ): q == activeQ reads the active slot (fpv); q == activeQ - 1 reads the
@@ -623,12 +604,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // no data — an all-zero no-op: the quarter still counts as submitted, the existing map
         // stands.
         bool usePrev;
-        if (q == qt.activeQ) {
+        if (q == qt.activeQuarter) {
             usePrev = false;
-        } else if (qt.activeQ > 0 && q == qt.activeQ - 1) {
+        } else if (qt.activeQuarter > 0 && q == qt.activeQuarter - 1) {
             usePrev = true;
         } else {
-            qt.lastSubmittedQ = q + 1;
+            qt.nextQuarter = q + 1;
             return;
         }
         Share[] memory shares = new Share[](r.admittedIds.length);
@@ -655,7 +636,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // FIP-0118: an all-zero quarter is a benign no-op — no SplitRule, no SetShares, existing map stands.
         // It still counts as submitted (the quarter cannot be resubmitted).
         if (total == ZERO) {
-            qt.lastSubmittedQ = q + 1;
+            qt.nextQuarter = q + 1;
             return;
         }
 
@@ -673,7 +654,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
             }
         }
 
-        qt.lastSubmittedQ = q + 1; // CEI: mark before the external call
+        qt.nextQuarter = q + 1; // CEI: mark before the external call
         FVMRewards.setShares(SERVICE_STREAM_ID, shares);
         emit SharesSubmitted(q, shares.length, total); // totalUsd as FixedU18 (18-decimal USD)
     }
@@ -728,17 +709,13 @@ contract ServiceRewardsActor is UnanimousGovernance {
         SraStorage.SraStorageRegistry storage r = _registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
-        uint64 activeQ = _quarter().activeQ;
+        uint64 activeQ = _quarter().activeQuarter;
         // Mirror slots retain only the active and the previous quarter (spec: CorrectVolume is
         // bounded by the verification window, so no historical per-orchestrator corrections
         // exist); earlier quarters return 0 — the aggregate is the only historical read (totalUsd).
         if (q == activeQ) return FPV({usd: o.fpv});
         if (activeQ > 0 && q == activeQ - 1) return FPV({usd: o.prevFpv});
         return FPV({usd: ZERO});
-    }
-
-    function isStablecoinAdmitted(address token) external view returns (bool) {
-        return _lists().stablecoins[token];
     }
 
     function getPricingParams() external view returns (uint256 minLot, uint256 priceBand) {
