@@ -2,7 +2,7 @@
 pragma solidity ^0.8.36;
 
 // ============================================================================
-// Service Rewards Actor (SRA) — FIP-0118 service-stream share computation contract (issue #4)
+// Service Rewards Actor (SRA) — Service-stream share computation contract
 //
 // Responsibilities: maintain the orchestrator registry, stablecoin/Filecoin Pay allowlists,
 //       and quarterly volume FPV state; compute service-stream shares per SplitRule
