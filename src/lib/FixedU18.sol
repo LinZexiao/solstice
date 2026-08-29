@@ -41,10 +41,7 @@ function divDown(FixedU18 dividend, FixedU18 divisor) pure returns (FixedU18 quo
     }
 }
 
-// @dev returns the integer remainder of divDown -- i.e. mul(dividend, ONE_WAD) % divisor,
-// wrapped as FixedU18 (unwrap at the call site for a raw uint256).
-//      Carries divDown's DividendTooLarge guard (same overflow surface on mul), and like
-//      divDown returns zero for a zero divisor (EVM mod semantics).
+// @dev returns zero if divisor is zero
 function mod(FixedU18 dividend, FixedU18 divisor) pure returns (FixedU18 remainder) {
     assembly ("memory-safe") {
         if gt(dividend, MAX_DIVIDEND_WAD) {

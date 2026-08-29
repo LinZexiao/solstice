@@ -32,8 +32,7 @@ struct WeightRecordUpdate {
 
 /// @notice One entry in an EXPLICIT stream's wallet-to-share map.
 /// @dev Shares across a stream's map must sum to SHARE_TOTAL (1e18); a single share must
-///      therefore fit uint64. Shares are FixedU18-scaled (1e18 == 1.0) so that
-///      largest-remainder arithmetic can stay in the fixed-point domain.
+///      therefore fit uint64.
 struct Share {
     address wallet;
     FixedU18 share;

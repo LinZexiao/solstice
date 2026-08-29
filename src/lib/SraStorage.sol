@@ -4,42 +4,20 @@ pragma solidity ^0.8.36;
 import {Epoch} from "./Epoch.sol";
 import {FixedU18} from "./FixedU18.sol";
 
-// ----------------------------------------------------------------------------
-// SRA ERC-7201 storage layout (4 namespaces) + precomputed slots, in a shared
-// library so the #5 proxy refactor can use the exact same namespace definitions
-// between proxy and implementation — a single source of truth for the storage layout.
-//
-// Identity model: a uint64 id is the orchestrator identity; an address is only the
-// current effective wallet mapping (activeIdOf). bindings/fpv/freeze history all
-// key on the id, so replace is an O(1) wallet re-point and historical quarter data
-// survives an operator-address change without migration. ids are allocated
-// monotonically and never reused (0 is the unregistered sentinel), so a removed
-// id stays resolvable — a released binding pair is "unclaimed" iff the bound id's
-// admitted flag is false.
-// ----------------------------------------------------------------------------
-
 library SraStorage {
     struct OrchestratorInfo {
-        address wallet; // current effective wallet (replace updates this; the share map writes this) — 20B
+        address wallet; // current effective wallet — 20B
         bool admitted; // admitted — 1B
         // Frozen-at-E+POST flag: exactly "was this orchestrator frozen at the close of the
         // posting period of the active quarter" — the fpv-effectiveness test. It changes only
         // before E+POST (freeze/unfreeze in the posting window set/clear it); from the
-        // verification window onward it is fixed. Contrast frozenSince, which tracks the
-        // current freeze state (0 = not frozen) for admission checks and freeze/unfreeze symmetry.
+        // verification window onward it is fixed.
         bool frozenAtPostEnd; // 1B
-        Epoch frozenSince; // current freeze state: 0 = not frozen; > 0 = frozen since this epoch — 8B
+        Epoch frozenSince; // 0 means not frozen — 8B
         // word 0: the four fields above pack into one 32B word (30B)
-        // Contribution slots (mirror): fpv = active-quarter contribution (0 = not posted),
-        // prevFpv = previous-quarter contribution mirror, exclusion-fixed at mirror advance
-        // (prevFpv <- frozenAtPostEnd ? 0 : fpv; fpv = 0). submitShares reads fpv for the
-        // active quarter (q == activeQ) and prevFpv for the previous one (q == activeQ - 1).
-        FixedU18 fpv; // word 1
-        FixedU18 prevFpv; // word 2
-        // word 3 — position in admittedIds, the O(1) swap-remove bookkeeping (remove rewrites the
-        // swapped id's index; admit sets it at push). Stale after removal but never read: ids are
-        // allocated monotonically and never reused, so the removed id's slot is never consulted again.
-        uint64 admittedIndex; // 8B
+        FixedU18 fpv; // active quarter
+        FixedU18 prevFpv; // previous quarter
+        uint64 admittedIndex; // position in admittedIds
     }
 
     /// @custom:storage-location erc7201:Solstice.SRA.Registry
@@ -47,37 +25,23 @@ library SraStorage {
         mapping(uint64 id => OrchestratorInfo) orchestrators; // id is the identity (monotonic, never reused)
         mapping(address orch => uint64 id) activeIdOf; // current effective address -> id (0 = unregistered sentinel)
         mapping(bytes32 pairId => uint64 id) bindings; // pairId = keccak256(abi.encode(payer, operator))
-        uint64 nextId; // id allocator (constructor sets 1; 0 is the unregistered sentinel)
-        uint64[] admittedIds; // enumerable admitted (incl. frozen); length doubles as the count
+        uint64 nextId; // id allocator
+        uint64[] admittedIds; // enumerable admitted (incl. frozen)
     }
 
-    /// @custom:storage-location erc7201:Solstice.SRA.AdmittedLists
-    struct SraStorageLists {
-        mapping(address => bool) stablecoins; // admitted stablecoins (valued at face USD)
-        mapping(address => bool) filecoinPayContracts; // admitted Filecoin Pay contracts
-        address[] stablecoinList; // needed for exclusive updates (design-gap completion)
-        address[] filecoinPayList;
-    }
 
     /// @custom:storage-location erc7201:Solstice.SRA.Quarter
     struct SraStorageQuarter {
-        // activeQ: the quarter the mirror has advanced to (postVolume/correctVolume set it on
-        // the first write of a new quarter — the advance trigger). The previous quarter's
-        // per-orchestrator contributions live in prevFpv (exclusion-fixed at the advance);
-        // only these two quarters retain per-orchestrator values (spec: CorrectVolume is
-        // bounded by the verification window, so no historical corrections exist).
-        uint64 activeQ;
-        uint64 lastSubmittedQ; // anti-replay: last submitted quarter + 1 (0 = none; q+1 encoding so quarter 0 does not collide with the sentinel; monotonic, no reset)
-        // Quarter counter array: per-quarter USD aggregate (aggregatedFPV O(1) for every
-        // quarter, fixed once the mirror advances — spec determinism: the registry is constant
-        // within a quarter, so the aggregate cannot drift with later remove/replace).
-        mapping(uint64 Q => FixedU18) totalUsd;
+        uint64 activeQuarter;
+        uint64 nextQuarter; // last submitted quarter + 1
+        mapping(uint64 quarter => FixedU18) totalUsd;
     }
 
     /// @custom:storage-location erc7201:Solstice.SRA.Params
+    /// @dev governs the off-chain USD conversion
     struct SraStorageParams {
-        uint256 minLot; // MIN_LOT (FIP §2.3: governs the off-chain conversion, not an on-chain computation)
-        uint256 priceBand; // PRICE_BAND (basis points; same — authoritative parameter for the off-chain indexer)
+        uint256 minLot; // FIP §2.3
+        uint256 priceBand; // basis points
     }
 
     // keccak256(abi.encode(uint256(keccak256(namespace)) - 1)) & ~bytes32(uint256(0xff)) — precomputed and hardcoded

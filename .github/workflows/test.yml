@@ -24,8 +24,5 @@ jobs:
           forge install
 
       - name: Run tests
-        # Symbolic verification (halmos) runs in its own workflow (halmos.yml),
-        # independent of this CI — it needs halmos plus a separate `forge build --ast`
-        # pass (see docs/sra-design.md §4.5).
         run: |
           forge test

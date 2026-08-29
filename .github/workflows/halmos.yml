@@ -20,9 +20,7 @@ jobs:
           cache: true
 
       - name: Set up Python
-        # halmos 0.1.x predates the halmos 0.3 CLI (which dropped
-        # --no-test-constructor and changed solver defaults); pin the version
-        # verified locally (QuarterWindowCheck 2/2 PASS) on a Python it supports.
+        # halmos 0.1.x requires 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
