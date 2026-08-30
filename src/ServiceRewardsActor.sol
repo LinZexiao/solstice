@@ -4,25 +4,14 @@ pragma solidity ^0.8.36;
 // ============================================================================
 // Service Rewards Actor (SRA) — Service-stream share computation contract
 //
-// Responsibilities: maintain the orchestrator registry, stablecoin/Filecoin Pay allowlists,
-//       and quarterly volume FPV state; compute service-stream shares per SplitRule
-//       (largest-remainder method) and write them to f02 (SetShares);
-//       export AggregatedFPV(Q) for the SWA. The SRA never receives or holds value.
+// Responsibilities:
+// - the orchestrator registry
+// - stablecoin/Filecoin Pay allowlists
+// - quarterly FilecoinPayVolume state
+// - compute service-stream shares and write them to f02 (SetShares)
+// - export AggregatedFPV(Q) for the SWA
 //
-// Basis: docs/sra-design.md (design, tests, decisions, security review; C1-C8 conflict rulings)
-//   - C1: registerPairs uses a named struct Binding[] (inline tuple-array params are illegal in Solidity)
-//   - T1: largest-remainder method per design §2.5.3 (remainder descending, first residue entries +1)
-//   - Identity: a uint64 id is the orchestrator identity; an address is only the current wallet mapping
-//     (activeIdOf). bindings/fpv/freeze state key on the id, so replace = O(1) wallet re-point and
-//     historical quarter data survives an operator-address change without migration; re-admit of a
-//     replaced/removed address is a fresh id with zero residual state (no alias chain to clean).
-//   - FIP-0118 (FIPs#1275): FIL→USD conversion moved off-chain — FPV is a single USD total, no
-//     PricePeriod[]/FinalizeConversion/PRICE_BAND on-chain; all-zero quarter -> SubmitShares no-op
-//   - D2: admitted (incl. frozen) <= 64; Admit rejects when full; only Remove releases; Freeze does not release
-//   - D3a: correctVolume bidirectional correction (unanimousNoHold + in-body verification-window check)
-//   - S5: freeze snapshot = stored frozenAtPostEnd flag (E+POST instant; set/cleared only before E+POST,
-//     fixed from the verification window onward) + frozenSince (current freeze state); at the mirror
-//     advance the flag is snapshotted into prevFpv (prevFpv <- frozenAtPostEnd ? 0 : fpv)
+// The SRA never receives or holds value.
 //
 // Storage: 3 ERC-7201 namespaces (Registry/Quarter/Params),
 //       reusing Solstice.Owners (dual Safe) and Solstice.PendingTasks (governance queue).
@@ -46,11 +35,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     using IsASafe for address;
     using OwnersLibrary for address;
 
-    // ------------------------------------------------------------------------
-    // Constants and immutable config (design §2.6: quarter/window/hold compile-time constants, passed via constructor)
-    // ------------------------------------------------------------------------
-
-    /// @dev f02's service stream fixed id = 2 (f02-design: "Migration pins consensus = 1 and service = 2").
     uint64 private constant SERVICE_STREAM_ID = 2;
 
     /// @dev Total share (f02 encoding constraint: Σ shares must be exactly == 1e18).
@@ -64,48 +48,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
     uint256 private constant MAX_PAIRS = 64; // registerPairs batch bound, aligns with MAX_ORCHESTRATORS
     uint256 private constant MAX_ALLOWLIST = 64; // per-allowlist array bound
 
-    /// @dev Business-domain upper bound on the quarterly FPV input (18-decimal FixedU18: 1e30 wraps 1e12 USD).
-    ///      With the FIL→USD conversion moved off-chain (FIPs#1275), the FPV input is a single USD total,
-    ///      so the on-chain arithmetic that must not overflow is only _computeShares:
-    ///        - per-orchestrator usd_f ≤ 1e30 → usd_f × 1e18 ≤ 1e48 ≪ 2^256
-    ///        - total (≤ MAX_ORCHESTRATORS 64) ≤ 64 × 1e30 = 6.4e31 ≪ 2^256
-    ///      Magnitude rationale: the assumed business domain is ~1e6 USD/quarter (§5.5); 1e12 USD is ~6
-    ///      orders of magnitude above it — loose-by-design headroom (immutable constant, permanent), while
-    ///      the arithmetic chain still closes with ~29 orders of magnitude to spare (1e48 → 2^256 ≈ 1.16e77).
-    ///      ⚠️ Maintenance: the closure assumes MAX_FPV_USD and MAX_ORCHESTRATORS(64) hold together.
-    FixedU18 private constant MAX_FPV_USD = FixedU18.wrap(1e30); // single USD total per quarter per orchestrator (18-decimal)
+    /// @notice quarterly orchestrator volume is limited to 1 trillion
+    /// @dev protects against overflow in _computeShares
+    FixedU18 private constant MAX_FPV_USD = FixedU18.wrap(1e30);
 
-    // Epoch-typed immutables (EPOCHS_PER_QUARTER public — sole source of truth for both the SRA
-    // and the SWA; SWA reads it via the auto-generated getter instead of duplicating quarter config).
-    // All quarter/window/hold values are Epoch-typed (epoch semantics -> Epoch type; POST_PERIOD,
-    // VERIFICATION_WINDOW, ACTIVATION_EPOCH follow SRA_CANCEL_HOLD/EPOCHS_PER_QUARTER — no wraps at call sites).
     Epoch public immutable EPOCHS_PER_QUARTER;
     Epoch private immutable POST_PERIOD;
-    Epoch private immutable VERIFICATION_WINDOW;
-    Epoch private immutable SRA_CANCEL_HOLD;
-    Epoch private immutable ACTIVATION_EPOCH;
-
-    // ------------------------------------------------------------------------
-    // ERC-7201 storage accessors — layout (structs, slots, assembly getters) lives in
-    // SraStorage.sol (separate storage declarations for the #5 proxy refactor);
-    // these thin wrappers keep the internal call sites unchanged.
-    // ------------------------------------------------------------------------
-
-    function _registry() internal pure returns (SraStorage.SraStorageRegistry storage r) {
-        return SraStorage.registry();
-    }
-
-    function _quarter() internal pure returns (SraStorage.SraStorageQuarter storage q) {
-        return SraStorage.quarter();
-    }
-
-    function _params() internal pure returns (SraStorage.SraStorageParams storage p) {
-        return SraStorage.params();
-    }
-
-    // ------------------------------------------------------------------------
-    // Events and errors
-    // ------------------------------------------------------------------------
 
     event OrchestratorAdmitted(address indexed orchestrator);
     event OrchestratorRemoved(address indexed orchestrator);
@@ -137,9 +85,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     error TooManyPairs(); // registerPairs batch exceeds MAX_PAIRS
     error InvalidParameter();
 
-    // ------------------------------------------------------------------------
-    // Constructor
-    // ------------------------------------------------------------------------
 
     /// @param owner1,owner2 governance dual Safe (must be Safe proxies)
     /// @param epochsPerQuarter quarter length (epochs)
@@ -164,20 +109,10 @@ contract ServiceRewardsActor is UnanimousGovernance {
         owner1.addOwner();
         owner2.addOwner();
 
-        // deployment-time parameter validation, aligned with setPricingParams
-        require(priceBand <= BASIS_POINTS, InvalidParameter());
         require(
-            Epoch.unwrap(epochsPerQuarter) > 0 && Epoch.unwrap(postPeriod) > 0 && Epoch.unwrap(verificationWindow) > 0,
-            InvalidParameter()
-        );
-        // The mirror advances only forward, so the verification window must close strictly before
-        // the next quarter begins — POST + VERIFY == EPOCHS would leave the window's last epoch
-        // inside the next quarter's mirror window (off-by-one dead zone: a write in that epoch
-        // would target a quarter the mirror has already advanced past). uint256 intermediate
-        // guards the addition against overflow.
-        require(
-            uint256(Epoch.unwrap(postPeriod)) + uint256(Epoch.unwrap(verificationWindow))
-                < uint256(Epoch.unwrap(epochsPerQuarter)),
+            priceBand <= BASIS_POINTS && Epoch.unwrap(epochsPerQuarter) > 0 &&
+            Epoch.unwrap(postPeriod) > 0 && Epoch.unwrap(verificationWindow) > 0 &&
+            postPeriod + verificationWindow < epochsPerQuarter,
             InvalidParameter()
         );
 
@@ -199,14 +134,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // Window and quarter utilities (design §2.5.1: Epoch = block.number)
     // ------------------------------------------------------------------------
 
+    /// @dev reverts with InvalidParameter on uint64 overflow
     function _qEnd(uint64 q) internal view returns (Epoch) {
-        // S1C: Q × EPOCHS_PER_QUARTER uses a uint256 intermediate to guard overflow.
-        //
-        // Range guard: without the explicit check, an attacker-controlled huge q would wrap
-        // inside Epoch.wrap and could collide into the current quarter window, bypassing the
-        // window checks (enabling forged shares). The guard rejects end beyond the Epoch
-        // width — at uint64, uint64.max × EPOCHS_PER_QUARTER ≥ 2^64 always overflows, so the
-        // guard is the revert path for the MaxQuarter probes (test/SRAAdversarial.t.sol).
         uint256 end = uint256(Epoch.unwrap(ACTIVATION_EPOCH)) + uint256(q) * uint256(Epoch.unwrap(EPOCHS_PER_QUARTER));
         require(end <= type(uint64).max, InvalidParameter());
         return Epoch.wrap(uint64(end));
@@ -268,7 +197,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      Pre-activation epochs (possible in test environments; the contract itself starts at
     ///      ACTIVATION_EPOCH) saturate to quarter 0, matching the initial activeQ = 0.
     function _quarterOf(Epoch nowE) internal view returns (uint64) {
-        if (Epoch.unwrap(nowE) < Epoch.unwrap(ACTIVATION_EPOCH)) return 0;
+        if (nowE < ACTIVATION_EPOCH) return 0;
         uint256 offset = uint256(Epoch.unwrap(nowE)) - uint256(Epoch.unwrap(ACTIVATION_EPOCH));
         return uint64(offset / uint256(Epoch.unwrap(EPOCHS_PER_QUARTER)));
     }
@@ -357,7 +286,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // advances activeQ to it, so the write target is the active quarter.
         _syncMirror(qt);
         require(o.fpv == ZERO, AlreadyPosted(q));
-        o.fpv = fpv; // FixedU18 — 18-decimal USD, type-checked from the entry
+        o.fpv = fpv;
         qt.totalUsd[q] = qt.totalUsd[q] + fpv;
 
         emit VolumePosted(q, msg.sender);
@@ -376,15 +305,11 @@ contract ServiceRewardsActor is UnanimousGovernance {
         require(r.activeIdOf[orch] == 0, AlreadyAdmitted(orch));
         require(r.admittedIds.length < MAX_ORCHESTRATORS, AtCapacity());
         uint64 id = r.nextId;
-        r.nextId = id + 1; // 0.8.x checked arithmetic: reverts on uint64 overflow (unreachable at governance frequency)
+        r.nextId = id + 1;
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         o.wallet = orch;
         o.admitted = true;
-        o.frozenSince = Epoch.wrap(0); // fresh identity: no residual freeze state
-        o.frozenAtPostEnd = false;
-        o.fpv = ZERO;
-        o.prevFpv = ZERO;
-        o.admittedIndex = uint64(r.admittedIds.length); // push position below; MAX_ORCHESTRATORS bounds it in uint64
+        o.admittedIndex = uint64(r.admittedIds.length);
         r.activeIdOf[orch] = id;
         r.admittedIds.push(id);
         emit OrchestratorAdmitted(orch);
@@ -737,23 +662,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint256[] memory remainders = new uint256[](n);
         FixedU18 residue = SHARE_TOTAL;
         for (uint256 i = 0; i < n; i++) {
-            // 18-decimal fixed-point: share = usd / total (divDown scales by 1e18 internally),
-            // mathematically identical to usd × 1e18 / total — both operands are already 18-decimal.
-            // Read the raw usd before overwriting: the remainder below must use the original
-            // value, not the floored share.
             FixedU18 usd = shares[i].share;
             shares[i].share = usd / total;
-            // remainder = divDown's integer remainder (mul(usd, 1e18) mod total) — same relative
-            // ordering as the pre-migration integer-USD formulation, so the largest-remainder
-            // assignment order is bit-identical.
             remainders[i] = FixedU18.unwrap(usd % total);
             residue = residue - shares[i].share;
         }
-        // Largest-remainder top-up: "each round pick the largest un-picked remainder, ties to the
-        // lowest index" is exactly "take the first residue entries of the (remainder desc, index
-        // asc) order". Sorting once (O(n log n)) replaces residue rounds of O(n) scanning
-        // (O(n × residue), quadratic in the worst case). MAX_ORCHESTRATORS is a FIP-0118 L1
-        // protocol cap that can be amended; the sort keeps cost growth in check if it is raised.
+        // Largest-remainder top-up
         uint256[] memory order = new uint256[](n);
         for (uint256 i = 0; i < n; i++) {
             order[i] = i;
@@ -826,9 +740,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         }
     }
 
-    function _swapRemove(uint64[] storage list, uint64 id) internal {
+    function _swapRemove(uint64[] storage list, uint64 id, uint64 index) internal {
         SraStorage.SraStorageRegistry storage r = _registry();
-        uint64 idx = r.orchestrators[id].admittedIndex; // O(1): the id records its own list position (set at admit, rewritten on swap)
+        uint64 index = r.orchestrators[id].admittedIndex;
         uint256 n = list.length;
         uint64 lastId = list[n - 1];
         if (id != lastId) {
