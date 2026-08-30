@@ -605,8 +605,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // forge-lint: disable-next-item(mixed-case-function) — FIP-0118 spec method name (selector-affecting)
     /// @notice Returns the post-binding USD aggregate (FIP-0118 §4.2): Σ of each non-excluded posted orchestrator's
     ///         bound USD value. Pure view — the FIL→USD conversion happens off-chain (FIPs#1275), so there is no
-    ///         on-chain finalize to trigger. #10: O(1) via the active-quarter mirror (the SWA's hot path);
-    ///         historical quarters fall back to a linear scan (audit/backfill only).
+    ///         on-chain finalize to trigger. O(1) quarter counter lookup for every quarter (the SWA's hot path).
     /// @dev Reverts NotBound(q) before binding — distinguishes "quarter not yet bound" (call too early; the SWA
     ///      does not need to re-enforce the check) from "quarter with zero declared volume" (legitimately returns 0).
     function aggregatedFilecoinPayVolume(uint64 q) external view returns (FixedU18 usd) {
