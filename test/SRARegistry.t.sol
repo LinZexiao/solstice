@@ -673,6 +673,7 @@ contract SRARegistryTest is SRATestBase {
         assertEq(_admittedIdAt(1), 3, "last element swapped into removed slot");
         assertEq(_admittedIndexOf(3), 1, "swapped element's admittedIndex rewritten");
         assertEq(_admittedIndexOf(1), 0, "untouched element's admittedIndex intact");
+        assertEq(_admittedIndexOf(2), 0, "removed id's admittedIndex cleared (dead pointer)");
         _assertIndexConsistent();
     }
 
@@ -688,6 +689,7 @@ contract SRARegistryTest is SRATestBase {
         assertEq(_admittedIdsLength(), 1);
         assertEq(_admittedIdAt(0), 1);
         assertEq(_admittedIndexOf(1), 0, "remaining element's index unchanged");
+        assertEq(_admittedIndexOf(2), 0, "removed id's admittedIndex cleared (dead pointer)");
         _assertIndexConsistent();
     }
 
@@ -704,13 +706,16 @@ contract SRARegistryTest is SRATestBase {
 
         _remove(a); // head: list [4, 2, 3]
         assertEq(_admittedIndexOf(4), 0, "head removal swaps last to front");
+        assertEq(_admittedIndexOf(1), 0, "removed id's admittedIndex cleared (dead pointer)");
         _assertIndexConsistent();
 
         _remove(c); // middle: list [4, 2]
         assertEq(_admittedIndexOf(2), 1, "middle removal swaps last to slot 1");
+        assertEq(_admittedIndexOf(3), 0, "removed id's admittedIndex cleared (dead pointer)");
         _assertIndexConsistent();
 
         _remove(b); // last: list [4]
+        assertEq(_admittedIndexOf(2), 0, "removed id's admittedIndex cleared (dead pointer)");
         _assertIndexConsistent();
 
         assertEq(_admittedIdsLength(), 1);
@@ -718,19 +723,22 @@ contract SRARegistryTest is SRATestBase {
     }
 
     /// Re-admit after removal: the new id is pushed at list.length — its admittedIndex must be that position.
+    /// Removes the last element (id 2): its stale admittedIndex would be 1, colliding with the new id's push
+    /// position — clearing the dead pointer is what keeps the two apart.
     function test_Remove_ThenAdmit_NewAdmitGetsPushIndex() public {
         address a = makeAddr("readmit-a");
         address b = makeAddr("readmit-b");
         _admit(a);
         _admit(b); // ids 1, 2; list [1, 2]
 
-        _remove(a); // list [2] (length 1)
+        _remove(b); // list [1] (length 1)
+        assertEq(_admittedIndexOf(2), 0, "removed id's admittedIndex cleared (dead pointer)");
 
         address c = makeAddr("readmit-c");
         _admit(c); // id 3 pushed at position 1
 
         assertEq(_admittedIdsLength(), 2);
-        assertEq(_admittedIdAt(0), 2);
+        assertEq(_admittedIdAt(0), 1);
         assertEq(_admittedIdAt(1), 3);
         assertEq(_admittedIndexOf(3), 1, "new admit's admittedIndex == push position (list.length)");
         _assertIndexConsistent();

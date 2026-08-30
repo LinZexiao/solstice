@@ -351,7 +351,13 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.frozenSince = NEVER;
         o.frozenAtPostEnd = false;
         r.activeIdOf[orch] = 0;
-        _swapRemove(r.admittedIds, id);
+        uint64 idx = o.admittedIndex;
+        uint64 lastId = r.admittedIds[r.admittedIds.length - 1];
+        _swapRemove(r.admittedIds, idx);
+        // swap double-write: the moved id's index must follow it, or the admittedIndex invariant (I6) breaks
+        if (id != lastId) r.orchestrators[lastId].admittedIndex = idx;
+        // dead pointer: the removed id leaves the list, its index no longer addresses a live slot
+        delete o.admittedIndex;
         emit OrchestratorRemoved(orch);
     }
 
@@ -743,16 +749,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         }
     }
 
-    function _swapRemove(uint64[] storage list, uint64 id, uint64 index) internal {
-        SraStorage.SraStorageRegistry storage r = _registry();
-        uint64 index = r.orchestrators[id].admittedIndex;
-        uint256 n = list.length;
-        uint64 lastId = list[n - 1];
-        if (id != lastId) {
-            list[idx] = lastId;
-            // swap double-write: the moved id's index must follow it, or the admittedIndex invariant breaks
-            r.orchestrators[lastId].admittedIndex = idx;
-        }
+    function _swapRemove(uint64[] storage list, uint64 idx) internal {
+        uint64 lastId = list[list.length - 1];
+        if (idx != list.length - 1) list[idx] = lastId;
         list.pop();
     }
 }
