@@ -57,22 +57,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     Epoch private immutable SRA_CANCEL_HOLD;
     Epoch private immutable ACTIVATION_EPOCH;
 
-    // ERC-7201 storage accessors — layout (structs, slots, assembly getters) lives in
-    // SraStorage.sol (separate storage declarations for the #5 proxy refactor);
-    // these thin wrappers keep the internal call sites unchanged.
-
-    function _registry() internal pure returns (SraStorage.SraStorageRegistry storage r) {
-        return SraStorage.registry();
-    }
-
-    function _quarter() internal pure returns (SraStorage.SraStorageQuarter storage q) {
-        return SraStorage.quarter();
-    }
-
-    function _params() internal pure returns (SraStorage.SraStorageParams storage p) {
-        return SraStorage.params();
-    }
-
     event OrchestratorAdmitted(address indexed orchestrator);
     event OrchestratorRemoved(address indexed orchestrator);
     event OrchestratorFrozen(address indexed orchestrator);
@@ -140,12 +124,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
         SRA_CANCEL_HOLD = cancelHold;
         ACTIVATION_EPOCH = activationEpoch;
 
-        SraStorage.SraStorageParams storage p = _params();
+        SraStorage.SraStorageParams storage p = SraStorage.params();
         p.minLot = minLot;
         p.priceBand = priceBand;
 
         // id allocator starts at 1: 0 is the unregistered sentinel (activeIdOf[addr] == 0)
-        _registry().nextId = 1;
+        SraStorage.registry().nextId = 1;
     }
 
     // ------------------------------------------------------------------------
@@ -189,7 +173,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      (skipped by a lag > 1) can never be submitted, so keying on it would deadlock removal.
     ///      lastSubmittedQ is a q+1 encoding (0 = none), so "awaiting" ⟺ lastSubmittedQ != latest + 1.
     function _pendingSharesQuarter() internal view returns (bool hasPending, uint64 q) {
-        SraStorage.SraStorageQuarter storage qt = _quarter();
+        SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
         // The latest bound quarter is a *time* property: derive it from
         // the clock via _quarterOf, not from the activeQ cache — the cache advances only on
         // writes, so a gap quarter (bound but unwritten) would be missed (activeQ still the
@@ -244,7 +228,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      previous active-quarter data is superseded (that quarter has no legal submission path
     ///      once the gap quarter has bound — NotLatestQuarter). O(n) per write regardless of gap size.
     function _advanceMirror(SraStorage.SraStorageQuarter storage qt, uint64 q) internal {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         bool adjacent = q == qt.activeQuarter + 1;
         for (uint256 i = 0; i < r.admittedIds.length; i++) {
             SraStorage.OrchestratorInfo storage o = r.orchestrators[r.admittedIds[i]];
@@ -264,7 +248,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     function registerPairs(Binding[] calldata pairs) external {
         require(pairs.length <= MAX_PAIRS, TooManyPairs()); // batch bound
         // single storage pointer — avoids hashing the orchestrators mapping twice
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[msg.sender];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(msg.sender));
@@ -288,7 +272,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///         (FilecoinPayVolume_i(Q): stablecoin face USD + off-chain-converted FIL volume, FIP-0118 FIPs#1275).
     function postVolume(uint64 q, FixedU18 fpv) external {
         // single storage pointer — avoids hashing the orchestrators mapping twice
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[msg.sender];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(msg.sender));
@@ -301,7 +285,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // aggregate), so `usd == 0` unambiguously means "not posted".
         require(fpv > ZERO && fpv <= MAX_FILECOIN_PAY_VOLUME_USD, InvalidParameter());
 
-        SraStorage.SraStorageQuarter storage qt = _quarter();
+        SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
 
         // Time-correct the mirror cache first (a gap quarter advances on the clock, not on
         // writes): the window checks bound q to the current time quarter, and _syncMirror
@@ -323,7 +307,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      bindings, FilecoinPayVolume, or freeze history. Because ids are never reused and the address mapping (activeIdOf)
     ///      is cleared on remove/replace, there is no residual alias-chain or frozen state to clean up.
     function admit(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         require(r.activeIdOf[orch] == 0, AlreadyAdmitted(orch));
         require(r.admittedIds.length < MAX_ORCHESTRATORS, AtCapacity());
         uint64 id = r.nextId;
@@ -348,7 +332,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @dev The id record is kept (wallet/fpv/prevFpv retained for audit); only the address mapping is
     ///      cleared, so a removed id is never reachable from an address and its pairs read as unclaimed.
     function remove(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(orch));
@@ -362,9 +346,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // a later removal must not rewrite it. The boundary is binding (not E+POST — freeze's
         // boundary): unlike freeze, removal drops the orchestrator from the admitted list, so the
         // map and the aggregate must exclude it together for every pre-binding removal.
-        uint64 q = _quarter().activeQuarter;
+        uint64 q = SraStorage.quarter().activeQuarter;
         if (!_afterBinding(q) && !o.frozenAtPostEnd && o.fpv > ZERO) {
-            _quarter().totalUsd[q] = _quarter().totalUsd[q] - o.fpv;
+            SraStorage.quarter().totalUsd[q] = SraStorage.quarter().totalUsd[q] - o.fpv;
         }
         o.admitted = false;
         o.frozenSince = NEVER;
@@ -382,7 +366,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     /// @notice Freeze: suspends, zeroes shares, excludes FilecoinPayVolume (spec §4.2). Freeze does not release a slot.
     function freeze(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(orch));
@@ -391,9 +375,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.frozenSince = nowE;
         // fpv-effectiveness: a freeze before the posting window closes excludes the active
         // quarter (E+POST snapshot); from the verification window onward the quarter is fixed.
-        uint64 q = _quarter().activeQuarter;
+        uint64 q = SraStorage.quarter().activeQuarter;
         if (nowE <= _qEnd(q) + POST_PERIOD && o.fpv > ZERO) {
-            _quarter().totalUsd[q] = _quarter().totalUsd[q] - o.fpv; // fpv retained as unfreeze restore source
+            SraStorage.quarter().totalUsd[q] = SraStorage.quarter().totalUsd[q] - o.fpv; // fpv retained as unfreeze restore source
             o.frozenAtPostEnd = true;
         }
         emit OrchestratorFrozen(orch);
@@ -401,7 +385,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     /// @notice Exact restoration (spec §4.2).
     function unfreeze(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(orch));
@@ -410,9 +394,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.frozenSince = NEVER;
         // Symmetric with freeze: an unfreeze before the posting window closes re-includes the
         // active-quarter contribution (if posted); from the verification window onward it is fixed.
-        uint64 q = _quarter().activeQuarter;
+        uint64 q = SraStorage.quarter().activeQuarter;
         if (nowE <= _qEnd(q) + POST_PERIOD && o.fpv > ZERO) {
-            _quarter().totalUsd[q] = _quarter().totalUsd[q] + o.fpv;
+            SraStorage.quarter().totalUsd[q] = SraStorage.quarter().totalUsd[q] + o.fpv;
             o.frozenAtPostEnd = false;
         }
         emit OrchestratorUnfrozen(orch);
@@ -423,7 +407,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      change. bindings/fpv/freeze state all key on the id, so they follow the identity automatically —
     ///      no enumeration, no alias chain, and historical quarter FilecoinPayVolume remains aggregated.
     function replace(address oldOrch, address newOrch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[oldOrch];
         require(id != 0 && r.orchestrators[id].admitted, NotAdmitted(oldOrch));
         require(r.activeIdOf[newOrch] == 0, AlreadyAdmitted(newOrch));
@@ -441,7 +425,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         unanimous(keccak256(msg.data), SRA_CANCEL_HOLD)
     {
         uint64 id = _requireAdmittedId(orch);
-        _registry().bindings[_pairId(payer, operator)] = id;
+        SraStorage.registry().bindings[_pairId(payer, operator)] = id;
         emit BindingReassigned(payer, operator, orch);
     }
 
@@ -473,7 +457,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         unanimous(keccak256(msg.data), SRA_CANCEL_HOLD)
     {
         require(priceBand <= BASIS_POINTS, InvalidParameter());
-        SraStorage.SraStorageParams storage p = _params();
+        SraStorage.SraStorageParams storage p = SraStorage.params();
         p.minLot = minLot;
         p.priceBand = priceBand;
         emit PricingParamsUpdated(minLot, priceBand);
@@ -500,13 +484,13 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // post); correctVolume is the governance path into the same FilecoinPayVolume storage, so it must not
         // re-admit a suspended orchestrator — otherwise a freeze → correctVolume → advance sequence
         // clears frozenAtPostEnd and the frozen orchestrator obtains shares in the next quarter.
-        SraStorage.OrchestratorInfo storage o = _registry().orchestrators[id];
+        SraStorage.OrchestratorInfo storage o = SraStorage.registry().orchestrators[id];
         require(o.frozenSince == NEVER, Frozen(orch));
 
         // Same business-domain bound as postVolume (governance path into the same FilecoinPayVolume storage).
         require(value <= MAX_FILECOIN_PAY_VOLUME_USD, InvalidParameter());
 
-        SraStorage.SraStorageQuarter storage qt = _quarter();
+        SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
 
         // Time-correct the mirror cache first (gap quarters advance on the clock, not on
         // writes): the window checks bound q to the current time quarter, and _syncMirror
@@ -546,8 +530,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // require's _qEnd range guard already reverts, so q + 1 cannot overflow here.)
         require(!_afterBinding(q + 1), NotLatestQuarter(q));
 
-        SraStorage.SraStorageRegistry storage r = _registry();
-        SraStorage.SraStorageQuarter storage qt = _quarter();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
+        SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
         require(q + 1 != qt.nextQuarter, AlreadySubmitted(q));
 
         // q is the latest bound quarter. The mirror has advanced only as far as the last written
@@ -628,7 +612,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // Quarter counter array — O(1) for every quarter. Values are fixed once the mirror
         // advances (spec determinism: the registry is constant within a quarter, so the
         // aggregate cannot drift with later remove/replace).
-        return _quarter().totalUsd[q];
+        return SraStorage.quarter().totalUsd[q];
     }
 
     /// @dev Quarter end epoch for quarter q (Epoch-typed; exposed per the IServiceRewardsActor interface the SWA consumes).
@@ -637,32 +621,32 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     function isAdmitted(address orch) external view returns (bool) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         return id != 0 && r.orchestrators[id].admitted;
     }
 
     function isFrozen(address orch) external view returns (bool) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         return id != 0 && !(r.orchestrators[id].frozenSince == NEVER);
     }
 
     function admittedCount() external view returns (uint64) {
-        return uint64(_registry().admittedIds.length); // MAX_ORCHESTRATORS bound keeps this < 2^64
+        return uint64(SraStorage.registry().admittedIds.length); // MAX_ORCHESTRATORS bound keeps this < 2^64
     }
 
     function bindingOf(address payer, address operator) external view returns (address) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.bindings[_pairId(payer, operator)];
         return id == 0 ? address(0) : r.orchestrators[id].wallet; // unbound (0) -> address(0); bound id -> current wallet
     }
 
     function fpvOf(uint64 q, address orch) external view returns (FilecoinPayVolume memory) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
-        uint64 activeQ = _quarter().activeQuarter;
+        uint64 activeQ = SraStorage.quarter().activeQuarter;
         // Mirror slots retain only the active and the previous quarter (spec: CorrectVolume is
         // bounded by the verification window, so no historical per-orchestrator corrections
         // exist); earlier quarters return 0 — the aggregate is the only historical read (totalUsd).
@@ -672,12 +656,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     function getPricingParams() external view returns (uint256 minLot, uint256 priceBand) {
-        SraStorage.SraStorageParams storage p = _params();
+        SraStorage.SraStorageParams storage p = SraStorage.params();
         return (p.minLot, p.priceBand);
     }
 
     function orchestratorCount() external view returns (uint64) {
-        return uint64(_registry().admittedIds.length);
+        return uint64(SraStorage.registry().admittedIds.length);
     }
 
     // ------------------------------------------------------------------------
@@ -753,7 +737,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     /// @dev Resolves the current admitted id for an address; reverts NotAdmitted when unregistered/removed.
     function _requireAdmittedId(address orch) internal view returns (uint64 id) {
-        SraStorage.SraStorageRegistry storage r = _registry();
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         id = r.activeIdOf[orch];
         require(id != 0 && r.orchestrators[id].admitted, NotAdmitted(orch));
     }

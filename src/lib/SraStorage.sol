@@ -29,7 +29,6 @@ library SraStorage {
         uint64[] admittedIds; // enumerable admitted (incl. frozen)
     }
 
-
     /// @custom:storage-location erc7201:Solstice.SRA.Quarter
     struct SraStorageQuarter {
         uint64 activeQuarter;
