@@ -50,6 +50,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @dev protects against overflow in _computeShares
     FixedU18 private constant MAX_FILECOIN_PAY_VOLUME_USD = FixedU18.wrap(1e30);
 
+    /// @dev Sentinel for `frozenSince == 0` ("never frozen"), mirrors SraStorage's 0-means-not-frozen layout.
+    Epoch private constant NEVER = Epoch.wrap(0);
+
     Epoch public immutable EPOCHS_PER_QUARTER;
     Epoch private immutable POST_PERIOD;
 
@@ -248,7 +251,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = r.activeIdOf[msg.sender];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(msg.sender));
-        require(o.frozenSince == Epoch.wrap(0), Frozen(msg.sender));
+        require(o.frozenSince == NEVER, Frozen(msg.sender));
 
         for (uint256 i = 0; i < pairs.length; i++) {
             bytes32 pairId = _pairId(pairs[i].payer, pairs[i].operator);
@@ -272,7 +275,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = r.activeIdOf[msg.sender];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(msg.sender));
-        require(o.frozenSince == Epoch.wrap(0), Frozen(msg.sender));
+        require(o.frozenSince == NEVER, Frozen(msg.sender));
         require(_inPostingWindow(q), NotInPostingWindow(q));
 
         // The single USD total is the only on-chain input that feeds _computeShares;
@@ -347,7 +350,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
             _quarter().totalUsd[q] = _quarter().totalUsd[q] - o.fpv;
         }
         o.admitted = false;
-        o.frozenSince = Epoch.wrap(0);
+        o.frozenSince = NEVER;
         o.frozenAtPostEnd = false;
         r.activeIdOf[orch] = 0;
         _swapRemove(r.admittedIds, id);
@@ -360,7 +363,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(orch));
-        require(o.frozenSince == Epoch.wrap(0), AlreadyFrozen(orch));
+        require(o.frozenSince == NEVER, AlreadyFrozen(orch));
         Epoch nowE = currentEpoch();
         o.frozenSince = nowE;
         // fpv-effectiveness: a freeze before the posting window closes excludes the active
@@ -379,9 +382,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(orch));
-        require(!(o.frozenSince == Epoch.wrap(0)), NotFrozen(orch));
+        require(!(o.frozenSince == NEVER), NotFrozen(orch));
         Epoch nowE = currentEpoch();
-        o.frozenSince = Epoch.wrap(0);
+        o.frozenSince = NEVER;
         // Symmetric with freeze: an unfreeze before the posting window closes re-includes the
         // active-quarter contribution (if posted); from the verification window onward it is fixed.
         uint64 q = _quarter().activeQuarter;
@@ -475,7 +478,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // re-admit a suspended orchestrator — otherwise a freeze → correctVolume → advance sequence
         // clears frozenAtPostEnd and the frozen orchestrator obtains shares in the next quarter.
         SraStorage.OrchestratorInfo storage o = _registry().orchestrators[id];
-        require(o.frozenSince == Epoch.wrap(0), Frozen(orch));
+        require(o.frozenSince == NEVER, Frozen(orch));
 
         // Same business-domain bound as postVolume (governance path into the same FilecoinPayVolume storage).
         require(value <= MAX_FILECOIN_PAY_VOLUME_USD, InvalidParameter());
@@ -619,7 +622,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     function isFrozen(address orch) external view returns (bool) {
         SraStorage.SraStorageRegistry storage r = _registry();
         uint64 id = r.activeIdOf[orch];
-        return id != 0 && !(r.orchestrators[id].frozenSince == Epoch.wrap(0));
+        return id != 0 && !(r.orchestrators[id].frozenSince == NEVER);
     }
 
     function admittedCount() external view returns (uint64) {
