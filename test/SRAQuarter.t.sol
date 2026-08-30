@@ -18,10 +18,10 @@ import {FilecoinPayVolume} from "../src/lib/SraTypes.sol";
 
 contract SRAQuarterTest is SRATestBase {
     // ------------------------------------------------------------------------
-    // Strategy 2: postVolume window boundaries
+    // postVolume window boundaries
     // ------------------------------------------------------------------------
 
-    /// Strategy 2: posting within the window (E < now <= E+POST) succeeds.
+    /// posting within the window (E < now <= E+POST) succeeds.
     function test_PostVolume_PostingWindow_Success() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -32,7 +32,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(f.usd), 100e18);
     }
 
-    /// Strategy 2: E itself is not in the posting window (E < now, strictly less).
+    /// E itself is not in the posting window (E < now, strictly less).
     function test_PostVolume_AtQuarterEnd_Reverts() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -43,7 +43,7 @@ contract SRAQuarterTest is SRATestBase {
         sra.postVolume(0, FixedU18.wrap(_fpv(100e18)));
     }
 
-    /// Strategy 2: the posting window's right boundary is inclusive of E+POST (<=).
+    /// the posting window's right boundary is inclusive of E+POST (<=).
     function test_PostVolume_AtPostEnd_Inclusive() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -53,7 +53,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(0, orch).usd), 100e18);
     }
 
-    /// Strategy 2: E+POST+1 enters verification; posting is rejected.
+    /// E+POST+1 enters verification; posting is rejected.
     function test_PostVolume_AfterPostingWindow_Reverts() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -64,7 +64,7 @@ contract SRAQuarterTest is SRATestBase {
         sra.postVolume(0, FixedU18.wrap(_fpv(100e18)));
     }
 
-    /// Strategy 2: at most once per quarter — the second posting reverts (posted flag).
+    /// at most once per quarter — the second posting reverts (posted flag).
     function test_PostVolume_SecondPosting_Reverts() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -107,10 +107,10 @@ contract SRAQuarterTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Strategy 7: CorrectVolume (within the verification window)
+    // CorrectVolume (within the verification window)
     // ------------------------------------------------------------------------
 
-    /// Strategy 7: an upward correction within the verification window succeeds.
+    /// an upward correction within the verification window succeeds.
     function test_CorrectVolume_VerificationWindow_Upward() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -123,7 +123,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(0, orch).usd), 250e18);
     }
 
-    /// Strategy 7: bidirectional correction — downward succeeds.
+    /// bidirectional correction — downward succeeds.
     function test_CorrectVolume_Downward_Corrects() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -136,7 +136,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(0, orch).usd), 40e18);
     }
 
-    /// Strategy 7: multiple corrections within the window; the last one wins (whole replacement).
+    /// multiple corrections within the window; the last one wins (whole replacement).
     function test_CorrectVolume_MultipleCorrections_LastWins() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -150,7 +150,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(0, orch).usd), 300e18);
     }
 
-    /// Strategy 7: an unposted orchestrator can be backfilled within the verification window (posted=false -> written).
+    /// an unposted orchestrator can be backfilled within the verification window (posted=false -> written).
     function test_CorrectVolume_BackfillUnposted() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -160,7 +160,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(0, orch).usd), 150e18);
     }
 
-    /// Strategy 7: the verification window's right boundary is inclusive of E+POST+VERIFY.
+    /// the verification window's right boundary is inclusive of E+POST+VERIFY.
     function test_CorrectVolume_AtVerifyEnd_Inclusive() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -173,7 +173,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(0, orch).usd), 200e18);
     }
 
-    /// Strategy 7: after the window closes (E+POST+VERIFY+1) CorrectVolume is rejected (value bound).
+    /// after the window closes (E+POST+VERIFY+1) CorrectVolume is rejected (value bound).
     function test_CorrectVolume_AfterVerificationWindow_Reverts() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -190,10 +190,10 @@ contract SRAQuarterTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Strategy 11: AggregatedFilecoinPayVolume (read-only bound value)
+    // AggregatedFilecoinPayVolume (read-only bound value)
     // ------------------------------------------------------------------------
 
-    /// Strategy 11: aggregatedFilecoinPayVolume reverts NotBound before the window closes (distinguishable from zero declared volume).
+    /// aggregatedFilecoinPayVolume reverts NotBound before the window closes (distinguishable from zero declared volume).
     function test_AggregatedFilecoinPayVolume_BeforeBinding_RevertsNotBound() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -208,7 +208,7 @@ contract SRAQuarterTest is SRATestBase {
         sra.aggregatedFilecoinPayVolume(0);
     }
 
-    /// Strategy 11: after binding aggregatedFilecoinPayVolume = Σ each orchestrator's bound USD value (pure view, FIPs#1275).
+    /// after binding aggregatedFilecoinPayVolume = Σ each orchestrator's bound USD value (pure view, FIPs#1275).
     function test_AggregatedFilecoinPayVolume_AfterBinding_SumOfValues() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
@@ -223,7 +223,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 350e18);
     }
 
-    /// Strategy 11: a frozen orchestrator's (frozen at the E+POST instant) FilecoinPayVolume is excluded from the aggregate.
+    /// a frozen orchestrator's (frozen at the E+POST instant) FilecoinPayVolume is excluded from the aggregate.
     function test_AggregatedFilecoinPayVolume_FrozenExcluded() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
@@ -309,7 +309,7 @@ contract SRAQuarterTest is SRATestBase {
         sra.postVolume(0, FixedU18.wrap(_fpv(100e18)));
     }
 
-    /// Strategy 7: correctVolume's target not admitted -> NotAdmitted revert at the second vote's body execution.
+    /// correctVolume's target not admitted -> NotAdmitted revert at the second vote's body execution.
     function test_CorrectVolume_NotAdmitted_Reverts() public {
         address stranger = makeAddr("stranger");
         vm.roll(_qPostEnd(0) + 1); // verification window

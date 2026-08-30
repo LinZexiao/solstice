@@ -20,10 +20,10 @@ contract SRASharesTest is SRATestBase {
     uint256 private _orchSalt;
 
     // ------------------------------------------------------------------------
-    // Strategy 1: share rounding (largest-remainder) — Σ shares exactly == 1e18
+    // share rounding (largest-remainder) — Σ shares exactly == 1e18
     // ------------------------------------------------------------------------
 
-    /// Strategy 1: 3-way split (1e18 % 3 = 1) -> one share +1, Σ exact.
+    /// 3-way split (1e18 % 3 = 1) -> one share +1, Σ exact.
     function test_SubmitShares_ThreeWayEqual_ExactSum() public {
         address a = _admitAndPost(100e18);
         address b = _admitAndPost(100e18);
@@ -43,7 +43,7 @@ contract SRASharesTest is SRATestBase {
         assertEq(_walletShare(shares, a) + _walletShare(shares, b) + _walletShare(shares, c), 1e18);
     }
 
-    /// Strategy 1: 7-way split (1e18 % 7 = 1) -> Σ exact.
+    /// 7-way split (1e18 % 7 = 1) -> Σ exact.
     function test_SubmitShares_SevenWayEqual_ExactSum() public {
         address[] memory orchs = new address[](7);
         for (uint256 i = 0; i < 7; i++) {
@@ -62,7 +62,7 @@ contract SRASharesTest is SRATestBase {
         }
     }
 
-    /// Strategy 1: 17-way split (1e18 % 17 = 15) -> Σ exact.
+    /// 17-way split (1e18 % 17 = 15) -> Σ exact.
     function test_SubmitShares_SeventeenWayEqual_ExactSum() public {
         for (uint256 i = 0; i < 17; i++) {
             _admitAndPost(100e18);
@@ -81,7 +81,7 @@ contract SRASharesTest is SRATestBase {
         }
     }
 
-    /// Strategy 1: uneven split (30/70) -> proportional allocation, Σ exact.
+    /// uneven split (30/70) -> proportional allocation, Σ exact.
     function test_SubmitShares_UnevenSplit_Proportional() public {
         address a = _admitAndPost(30e18);
         address b = _admitAndPost(70e18);
@@ -97,10 +97,10 @@ contract SRASharesTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Strategy 4: all-zero quarter is a benign no-op (FIP-0118 FIPs#1275)
+    // all-zero quarter is a benign no-op (FIP-0118 FIPs#1275)
     // ------------------------------------------------------------------------
 
-    /// Strategy 4: nobody posted (total=0) -> submitShares is a benign no-op: no SetShares call,
+    /// nobody posted (total=0) -> submitShares is a benign no-op: no SetShares call,
     /// the existing share map stands (FIP: "SplitRule is not evaluated and the existing share map stands").
     function test_SubmitShares_AllZero_NoOp_KeepsMap() public {
         // two orchestrators admitted but nobody posted
@@ -134,10 +134,10 @@ contract SRASharesTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Strategy 3: freeze exclusion (incl. E+POST snapshot semantics)
+    // freeze exclusion (incl. E+POST snapshot semantics)
     // ------------------------------------------------------------------------
 
-    /// Strategy 3: a frozen orchestrator is excluded — the share map contains only active orchestrators, Σ still exactly == 1e18.
+    /// a frozen orchestrator is excluded — the share map contains only active orchestrators, Σ still exactly == 1e18.
     function test_SubmitShares_FrozenExcluded_ExactSum() public {
         address a = _admitAndPost(100e18);
         address b = _admitAndPost(100e18);
@@ -211,10 +211,10 @@ contract SRASharesTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Strategy 10: SetShares encoding (Σ=1e18, recipient resolution, map ≤ 64)
+    // SetShares encoding (Σ=1e18, recipient resolution, map ≤ 64)
     // ------------------------------------------------------------------------
 
-    /// Strategy 10: share map size = number of active orchestrators (≤ 64); each wallet resolves to an orch address.
+    /// share map size = number of active orchestrators (≤ 64); each wallet resolves to an orch address.
     function test_SubmitShares_MapSize_EqualsActiveOrchestrators() public {
         address a = _admitAndPost(100e18);
         address b = _admitAndPost(200e18);
@@ -521,7 +521,9 @@ contract SRASharesTest is SRATestBase {
         sra.submitShares(0);
         Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1);
-        assertEq(_walletShare(shares, newOrch), 1e18, "historical FilecoinPayVolume follows the identity to the new wallet");
+        assertEq(
+            _walletShare(shares, newOrch), 1e18, "historical FilecoinPayVolume follows the identity to the new wallet"
+        );
         assertEq(_sumShares(shares), 1e18);
 
         // aggregatedFilecoinPayVolume agrees: the historical quarter's volume is not lost

@@ -24,7 +24,7 @@ contract SRAGovernanceTest is SRATestBase {
     // Two votes + hold flow
     // ------------------------------------------------------------------------
 
-    /// Strategy 6: after two votes + hold elapses, any keeper can trigger execution (admit takes effect).
+    /// after two votes + hold elapses, any keeper can trigger execution (admit takes effect).
     function test_Admit_TwoApprovalsPlusHold_Executes() public {
         address orch = makeAddr("orch");
         assertFalse(sra.isAdmitted(orch));
@@ -43,7 +43,7 @@ contract SRAGovernanceTest is SRATestBase {
         assertEq(sra.admittedCount(), 1);
     }
 
-    /// Strategy 6: a third call (execution attempt) within the hold reverts HoldUntil.
+    /// a third call (execution attempt) within the hold reverts HoldUntil.
     function test_Admit_HoldNotElapsed_ExecutionReverts() public {
         address orch = makeAddr("orch");
 
@@ -59,7 +59,7 @@ contract SRAGovernanceTest is SRATestBase {
         assertFalse(sra.isAdmitted(orch));
     }
 
-    /// Strategy 6: a single vote (only owner1) does not execute.
+    /// a single vote (only owner1) does not execute.
     function test_Admit_SingleApproval_NotExecuted() public {
         address orch = makeAddr("orch");
 
@@ -75,7 +75,7 @@ contract SRAGovernanceTest is SRATestBase {
         sra.admit(orch);
     }
 
-    /// Strategy 6: a non-owner calling a governance method reverts NotOwner.
+    /// a non-owner calling a governance method reverts NotOwner.
     function test_Admit_NonOwner_Reverts() public {
         address stranger = makeAddr("stranger");
         vm.prank(stranger);
@@ -83,7 +83,7 @@ contract SRAGovernanceTest is SRATestBase {
         sra.admit(makeAddr("orch"));
     }
 
-    /// Strategy 6: after both Safes call the same governance method, the taskId record is identical (keccak256(msg.data)).
+    /// after both Safes call the same governance method, the taskId record is identical (keccak256(msg.data)).
     function test_Admit_TaskIdIsKeccakOfCalldata() public {
         address orch = makeAddr("orch");
         bytes32 expectedTaskId = keccak256(abi.encodeWithSignature("admit(address)", orch));
@@ -106,7 +106,7 @@ contract SRAGovernanceTest is SRATestBase {
     // Veto (cancelPending)
     // ------------------------------------------------------------------------
 
-    /// Strategy 6: either Safe can veto to discard a queued change; after the veto the flow restarts.
+    /// either Safe can veto to discard a queued change; after the veto the flow restarts.
     function test_Veto_CancelsPendingAdmit() public {
         address orch = makeAddr("orch");
 
@@ -128,7 +128,7 @@ contract SRAGovernanceTest is SRATestBase {
         assertFalse(sra.isAdmitted(orch));
     }
 
-    /// Strategy 6: a non-owner cannot veto.
+    /// a non-owner cannot veto.
     function test_Veto_NonOwner_Reverts() public {
         bytes32 taskId = keccak256("whatever");
         vm.prank(makeAddr("stranger"));
@@ -140,7 +140,7 @@ contract SRAGovernanceTest is SRATestBase {
     // NO_HOLD: correctVolume full-vote immediate execution
     // ------------------------------------------------------------------------
 
-    /// Strategy 6: the unanimousNoHold path — the second vote executes immediately (correctVolume takes effect within the verification window).
+    /// the unanimousNoHold path — the second vote executes immediately (correctVolume takes effect within the verification window).
     function test_CorrectVolume_NoHold_SecondApprovalExecutesImmediately() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -162,7 +162,7 @@ contract SRAGovernanceTest is SRATestBase {
         assertEq(FixedU18.unwrap(f2.usd), 250e18);
     }
 
-    /// Strategy 6: before correctVolume's second vote (not a full vote), a repeat vote reverts AlreadyApproved.
+    /// before correctVolume's second vote (not a full vote), a repeat vote reverts AlreadyApproved.
     function test_CorrectVolume_SameOwnerTwice_Reverts() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -199,7 +199,10 @@ contract SRAGovernanceTest is SRATestBase {
         vm.roll(block.number + SRA_CANCEL_HOLD + 1000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
-            assertTrue(logs[i].topics[0] != ServiceRewardsActor.AdmittedListsUpdated.selector, "no AdmittedListsUpdated emitted");
+            assertTrue(
+                logs[i].topics[0] != ServiceRewardsActor.AdmittedListsUpdated.selector,
+                "no AdmittedListsUpdated emitted"
+            );
         }
     }
 

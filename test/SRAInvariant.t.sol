@@ -87,13 +87,13 @@ contract SRAInvariantHandler is SRATestBase {
 
     bool internal _everSubmitted;
 
-    // ---- A2/A3: POST-instant freeze snapshot + usdValue tracking (mirror of the implementation's frozenSince timing) ----
+    // ---- POST-instant freeze snapshot + usdValue tracking (mirror of the implementation's frozenSince timing) ----
     /// @dev freeze effective epoch list (the handler replays the implementation's frozenSince transitions); paired with _unfreezeAt as half-open intervals.
     mapping(address => uint64[]) internal _freezeAt;
     /// @dev unfreeze effective epoch list (mirror of the frozenSince transitions).
     mapping(address => uint64[]) internal _unfreezeAt;
 
-    /// @dev quarter and POST-instant snapshot of the most recent successful submitShares (read by invariants A2/A3).
+    /// @dev quarter and POST-instant snapshot of the most recent successful submitShares (read by the invariants).
     bool internal _hasLastSubmit;
     uint64 internal _lastSubmitQ;
     address[] internal _lastFrozenWallets; // resolved addresses of active orchestrators frozen at the POST instant
@@ -143,7 +143,7 @@ contract SRAInvariantHandler is SRATestBase {
     /// @dev Spec §3.2 timing guard: remove reverts while a bound quarter awaits its share map. The handler
     ///      mirrors the spec's governance procedure — clear any pending quarter by cranking SubmitShares first
     ///      (permissionless + idempotent; quarters beyond MAX_Q are never bound here), so the guard passes.
-    ///      The crank keeps the A2/A3 snapshot bookkeeping in sync with the contract.
+    ///      The crank keeps the snapshot bookkeeping in sync with the contract.
     function remove(uint256 idx) external {
         address orch = _pickOrch(idx);
         if (!sra.isAdmitted(orch)) return;
@@ -291,7 +291,7 @@ contract SRAInvariantHandler is SRATestBase {
         uint64 qq = uint64(bound(q, 0, MAX_Q));
         address orch = _pickOrch(orchIdx);
         if (!sra.isAdmitted(orch)) return;
-        if (sra.isFrozen(orch)) return; // freeze symmetry: the implementation's correctVolume gates on frozenSince (A2/A3 fix)
+        if (sra.isFrozen(orch)) return; // freeze symmetry: the implementation's correctVolume gates on frozenSince
         // S3: bound(1, 1e30) aligns with the code-enforced MAX_FILECOIN_PAY_VOLUME_USD (correctVolume rejects > 1e30).
         uint256 stableUsd = bound(usd, 1, 1e30);
         uint256 target = _qPostEnd(qq) + 1 + uint64(bound(usd, 0, VERIFICATION_WINDOW - 1));
@@ -306,7 +306,7 @@ contract SRAInvariantHandler is SRATestBase {
     /// @notice Submit shares (permissionless after binding; FIPs#1275: no on-chain finalize to trigger).
     ///         Only a *successful* submit with non-zero total records the last-submit snapshot — a revert
     ///         (e.g. AlreadySubmitted) or an all-zero no-op leaves the previous snapshot valid (the map did
-    ///         not change), otherwise A2/A3 would compare a new snapshot against the stale map.
+    ///         not change), otherwise the invariant would compare a new snapshot against the stale map.
     function submitShares(uint256 q) external {
         uint64 qq = uint64(bound(q, 0, MAX_Q));
         uint256 target = _qVerifyEnd(qq) + 1 + uint64(bound(q, 0, 50));
@@ -315,7 +315,7 @@ contract SRAInvariantHandler is SRATestBase {
     }
 
     /// @dev Best-effort SubmitShares crank (permissionless + idempotent): a successful submit with a
-    ///      non-zero total records the last-submit snapshot (A2/A3); a revert (NotBound/AlreadySubmitted)
+    ///      non-zero total records the last-submit snapshot; a revert (NotBound/AlreadySubmitted)
     ///      or an all-zero no-op leaves the previous snapshot valid (the map did not change).
     function _crankSubmitShares(uint64 qq) internal {
         try sra.submitShares(qq) {
@@ -494,7 +494,7 @@ contract SRAInvariantHandler is SRATestBase {
         _executedTasks.push(taskId);
     }
 
-    /// @dev A2/A3: records the POST-instant snapshot for a successfully submitted non-zero quarter — the set of
+    /// @dev Records the POST-instant snapshot for a successfully submitted non-zero quarter — the set of
     ///      active orchestrators frozen at the POST instant, and the Σ and count of non-frozen with usd > 0
     ///      (consistent with the implementation's submitShares admittedList traversal exclusion semantics).
     ///      Returns false for an all-zero quarter (benign no-op — the map did not change, so the previous
@@ -669,7 +669,7 @@ contract SRAInvariantTest is Test {
     /// itself — the implementation's _frozenAtPostEnd continue excludes that orchestrator, producing no wallet) must not
     /// appear in the share map (S5 strict snapshot: in-window unfreeze/freeze changes do not affect the quarter).
     /// Catches: freeze-exclusion omission (_frozenAtPostEnd determination error, freeze-interval pairing misalignment),
-    ///        frozen identity not transferring with the struct after replace (A2 is the only machine verification covering this semantics).
+    ///        frozen identity not transferring with the struct after replace (the invariant is the only machine verification covering this semantics).
     function invariant_FrozenAtPostEnd_ExcludedFromShares() public view {
         if (!handler.hasLastSubmit()) return;
         Share[] memory shares = handler.getServiceShares();

@@ -82,7 +82,7 @@ contract SRARegistryTest is SRATestBase {
     // registerPairs (strategy 3)
     // ------------------------------------------------------------------------
 
-    /// Strategy 3: an admitted orchestrator can register binding pairs.
+    /// an admitted orchestrator can register binding pairs.
     function test_RegisterPairs_Success() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -94,7 +94,7 @@ contract SRARegistryTest is SRATestBase {
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orch);
     }
 
-    /// Strategy 3: a non-admitted address cannot registerPairs.
+    /// a non-admitted address cannot registerPairs.
     function test_RegisterPairs_NotAdmitted_Reverts() public {
         address stranger = makeAddr("stranger");
         Binding[] memory pairs = new Binding[](1);
@@ -105,7 +105,7 @@ contract SRARegistryTest is SRATestBase {
         sra.registerPairs(pairs);
     }
 
-    /// Strategy 3: a frozen orchestrator cannot registerPairs.
+    /// a frozen orchestrator cannot registerPairs.
     function test_RegisterPairs_Frozen_Reverts() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -119,7 +119,7 @@ contract SRARegistryTest is SRATestBase {
         sra.registerPairs(pairs);
     }
 
-    /// Strategy 3: registerPairs reverts when the pair is already bound to another (uniqueness invariant).
+    /// registerPairs reverts when the pair is already bound to another (uniqueness invariant).
     function test_RegisterPairs_DuplicatePair_Reverts() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
@@ -135,7 +135,7 @@ contract SRARegistryTest is SRATestBase {
         sra.registerPairs(pairs);
     }
 
-    /// Strategy 3: the same orchestrator re-registering the same pair reverts (self-duplicates also disallowed).
+    /// the same orchestrator re-registering the same pair reverts (self-duplicates also disallowed).
     function test_RegisterPairs_SameOrchDuplicatePair_Reverts() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -180,7 +180,7 @@ contract SRARegistryTest is SRATestBase {
         assertEq(sra.bindingOf(makeAddr("payer0"), makeAddr("op0")), orch);
     }
 
-    /// Strategy 3: Remove releases all bindings; pairs return to unclaimed and can be claimed by other orchestrators.
+    /// Remove releases all bindings; pairs return to unclaimed and can be claimed by other orchestrators.
     function test_Remove_ReleasesPairs_CanBeReclaimed() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
@@ -203,7 +203,7 @@ contract SRARegistryTest is SRATestBase {
     // freeze / unfreeze (strategy 3)
     // ------------------------------------------------------------------------
 
-    /// Strategy 3: a frozen orchestrator cannot postVolume (rejected even within the posting window).
+    /// a frozen orchestrator cannot postVolume (rejected even within the posting window).
     function test_Freeze_PreventsPostVolume() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -248,7 +248,7 @@ contract SRARegistryTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(0, b).usd), 180e18, "corrected after unfreeze");
     }
 
-    /// Strategy 3: unfreeze restores operation capability (registerPairs / postVolume).
+    /// unfreeze restores operation capability (registerPairs / postVolume).
     function test_Unfreeze_RestoresOperations() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -274,7 +274,7 @@ contract SRARegistryTest is SRATestBase {
     // replace / reassignBinding
     // ------------------------------------------------------------------------
 
-    /// Strategy 3: replace transfers the operator identity (the new address gains admission and bindings; the old address becomes invalid).
+    /// replace transfers the operator identity (the new address gains admission and bindings; the old address becomes invalid).
     function test_Replace_TransfersIdentity() public {
         address oldOrch = makeAddr("oldOrch");
         address newOrch = makeAddr("newOrch");
@@ -331,7 +331,7 @@ contract SRARegistryTest is SRATestBase {
         sra.registerPairs(pairs);
     }
 
-    /// Strategy 3: reassignBinding reassigns the (payer, operator) binding to another orchestrator.
+    /// reassignBinding reassigns the (payer, operator) binding to another orchestrator.
     function test_ReassignBinding_ChangesBinding() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
