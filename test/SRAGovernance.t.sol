@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // SRA governance flow tests — covers design §3 strategy 6 (governance flow)
 //
 //   - two votes + permissionless execution after SRA_CANCEL_HOLD elapses
@@ -10,7 +9,6 @@ pragma solidity ^0.8.36;
 //   - veto (cancelPending) discards a queued change
 //   - NO_HOLD (correctVolume) full-vote immediate execution
 //   - taskId = keccak256(msg.data): different array parameter order -> different taskId -> no merge (I2 risk)
-// ============================================================================
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {Vm} from "forge-std/Vm.sol";

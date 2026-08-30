@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // Active-quarter aggregate mirror — differential tests
 //   aggregatedFilecoinPayVolume reads the O(1) mirror (totalUsd) for the active quarter; these
 //   tests pin the mirror to the linear-scan semantics across post / correct /
@@ -9,7 +8,6 @@ pragma solidity ^0.8.36;
 //
 // Time model (test base): E(Q)=100000+Q*1000; posting (E,E+300]; verification
 //   (E+300,E+700]; post-binding > E+700. SRA_CANCEL_HOLD=100 per governance step.
-// ============================================================================
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";

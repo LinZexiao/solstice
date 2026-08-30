@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // Service Rewards Actor (SRA) — Service-stream share computation contract
 //
 // Responsibilities:
@@ -16,7 +15,6 @@ pragma solidity ^0.8.36;
 // Storage: 3 ERC-7201 namespaces (Registry/Quarter/Params),
 //       reusing Solstice.Owners (dual Safe) and Solstice.PendingTasks (governance queue).
 //       The allowlists are event-only (AdmittedListsUpdated is the authoritative snapshot).
-// ============================================================================
 
 import {Epoch, currentEpoch} from "./lib/Epoch.sol";
 import {FixedU18, ONE, ZERO} from "./lib/FixedU18.sol";

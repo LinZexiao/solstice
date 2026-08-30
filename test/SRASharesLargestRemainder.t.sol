@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // Largest-remainder top-up semantics — direct _computeShares unit tests.
 //
 // The differential suite (test/differential/DifferentialShares.t.sol) locks
@@ -11,7 +10,6 @@ pragma solidity ^0.8.36;
 //   - tie-break: equal remainders are topped up in input order (index ascending)
 //   - remainder boundary: the max remainder at the first / last index
 //   - size edges: n = 1 / 2 / 64 (MAX_ORCHESTRATORS protocol boundary)
-// ============================================================================
 
 import {Share} from "../src/lib/FVMRewardTypes.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";

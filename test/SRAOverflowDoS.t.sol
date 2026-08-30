@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // Overflow DoS regression tests — V3 (TDD Red phase, audit findings)
 //
 // Background: the SRA audit (PR #24, probe-verified) found 3 overflow-DoS
@@ -21,7 +20,6 @@ pragma solidity ^0.8.36;
 // Expected fix behavior (locked by these tests, TDD):
 //   - V3: a USD total beyond the business bound is rejected at the entry; a normal
 //         total must let submitShares settle (system stays operational).
-// ============================================================================
 
 import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {SRATestBase} from "./SRATestBase.sol";

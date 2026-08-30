@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // Adversarial input matrix for the external write surface (S1, QA system fix)
 //
 // Background: the V1/V2/V3 overflow audit (docs/sra-design.md §4.3.10) exposed a
@@ -20,7 +19,6 @@ pragma solidity ^0.8.36;
 //     This file adds: q-parameter window boundaries, fpv exact-limit accept /
 //     limit+1 reject, zero-address probes, setPricingParams full boundary grid,
 //     empty-array semantics, and the multi-orchestrator aggregate bound.
-// ============================================================================
 
 import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";

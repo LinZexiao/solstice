@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // SRA invariant tests (P1) — random operation sequences + persistent invariant verification
 //
 // 3 core invariants:
@@ -25,7 +24,6 @@ pragma solidity ^0.8.36;
 //   - every operation's precondition check keeps the "expected success" path reachable (invalid calls return directly, no state pollution)
 //
 // Run: forge test --match-contract SRAInvariant (default 256 runs)
-// ============================================================================
 
 import {Test} from "forge-std/Test.sol";
 
@@ -114,10 +112,8 @@ contract SRAInvariantHandler is SRATestBase {
         }
     }
 
-    // ========================================================================
     // Governance operations (unanimous + hold three phases: owner1 vote -> owner2 vote -> roll(hold) -> third execution)
     // Precondition checks guarantee the third call succeeds (no concurrent insertion between the two votes; operation is atomic)
-    // ========================================================================
 
     /// @notice Atomic admit: two votes + hold + execution, completed within one call.
     function admit(uint256 idx) external {
@@ -273,9 +269,7 @@ contract SRAInvariantHandler is SRATestBase {
         _setBound(payer, operator, orch);
     }
 
-    // ========================================================================
     // Business operations (posting / verification / bound windows, explicit roll)
-    // ========================================================================
 
     /// @notice An orchestrator posts a pure-stablecoin FilecoinPayVolume (no FIL periods, bypassing PRICE_BAND complexity).
     function postVolume(uint256 q, uint256 orchIdx, uint256 usd) external {
@@ -334,9 +328,7 @@ contract SRAInvariantHandler is SRATestBase {
         } catch {}
     }
 
-    // ========================================================================
     // Governance "slow path": parked tasks exist across operations (simulating mid-governance state, invariant I3 verification)
-    // ========================================================================
 
     /// @notice Only two votes (no execution): the admit task enters pending state, existing across operations.
     function parkAdmit(uint256 idx) external {
@@ -395,9 +387,7 @@ contract SRAInvariantHandler is SRATestBase {
         vm.roll(block.number + uint64(bound(bump, 1, 500)));
     }
 
-    // ========================================================================
     // Query interface (read by the invariant test contract)
-    // ========================================================================
 
     function sraInstance() external view returns (ServiceRewardsActor) {
         return sra;
@@ -483,9 +473,7 @@ contract SRAInvariantHandler is SRATestBase {
         return uint160(uint256(vm.load(address(sra), slot)) >> 64);
     }
 
-    // ========================================================================
     // Internal helpers
-    // ========================================================================
 
     function _pickOrch(uint256 idx) internal view returns (address) {
         return _orchPool[bound(idx, 0, ORCH_POOL - 1)];

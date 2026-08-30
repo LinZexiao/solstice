@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // SRA share computation tests — covers design §3 strategies 1 (share rounding) / 3 (freeze-semantics snapshot) /
 //   4 (all-zero benign no-op, FIPs#1275 replacing D1 burn) / 10 (SetShares encoding) / 12 (f02 mock driving)
 //
 // Verification means: after submitShares, read the mock's getShares(2) (the f02 service stream's share map).
 // Mock validation: stream exists/EXPLICIT/writer permission/≤64 recipients/Σ==1e18 (see FVMRewardActor._setShares).
-// ============================================================================
 
 import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {FVMRewards} from "../src/lib/FVMRewards.sol";

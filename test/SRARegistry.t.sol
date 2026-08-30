@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // SRA registry tests — covers design §3 strategy 3 (freeze semantics) + strategy 5 (cap rejection D2)
 //
 //   - orchestrator admission/cap: 64-full rejection, Remove release, Freeze non-release (D2)
 //   - registerPairs: uniqueness, admission/freeze gating, re-claimable after Remove release
 //   - freeze/unfreeze: suspend/restore operation capability
 //   - replace: operator identity transfer; reassignBinding: binding reassignment
-// ============================================================================
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";

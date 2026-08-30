@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // SRA quarter state machine + FilecoinPayVolume + FIL pricing tests
 //   Covers design §3 strategies 2 (window boundaries) / 7 (CorrectVolume) / 11 (AggregatedFilecoinPayVolume)
 //   FIP-0118 (FIPs#1275): FilecoinPayVolume is a single USD total — strategies 8 (PRICE_BAND) and
@@ -11,7 +10,6 @@ pragma solidity ^0.8.36;
 //   posting:      E < now <= E+POST
 //   verification: E+POST < now <= E+POST+VERIFY
 //   post-binding: now > E+POST+VERIFY
-// ============================================================================
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";

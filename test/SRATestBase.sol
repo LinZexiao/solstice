@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // SRA test common base (test-first contract anchor)
 //
 // This file is the SRA contract interface contract derived by the tester from design doc
@@ -14,7 +13,6 @@ pragma solidity ^0.8.36;
 //   H-ctor : the constructor signature (9 params) is a test design derivation (✏️)
 //   H-fpv  : FilecoinPayVolume is a single USD total (FIP-0118 FIPs#1275: off-chain conversion)
 //   H-band : PRICE_BAND in basis points (2000 = allows ±20% deviation); authoritative for the off-chain indexer
-// ============================================================================
 
 import {SafeProxy} from "@safe/proxies/SafeProxy.sol";
 

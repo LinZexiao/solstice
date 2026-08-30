@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// ============================================================================
 // SRA integration contract tests — simulate the SWA QuarterlyGateCheck consumption chain of aggregatedFilecoinPayVolume
 //
 // Background: FIPs#1275 moved the FIL→USD conversion off-chain — FilecoinPayVolume is a single USD total, the
 // on-chain FinalizeConversion is gone, and aggregatedFilecoinPayVolume is a pure view (no finalize to trigger).
 // These tests lock the contract "aggregatedFilecoinPayVolume (view) == submitShares's internal total — no divergence"
 // (the property the spec's "execution order produces no diverging numbers" clause requires).
-// ============================================================================
 
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
@@ -30,7 +28,11 @@ contract SRAIntegrationTest is SRATestBase {
 
         _rollTo(_qVerifyEnd(0) + 1); // post-binding
 
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 900e18, "aggregatedFilecoinPayVolume sums the bound USD values");
+        assertEq(
+            FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)),
+            900e18,
+            "aggregatedFilecoinPayVolume sums the bound USD values"
+        );
 
         // no divergence: submitShares's internal total must == aggregatedFilecoinPayVolume (expectEmit captures totalUsd)
         vm.expectEmit(true, false, false, true, address(sra));
@@ -50,7 +52,9 @@ contract SRAIntegrationTest is SRATestBase {
 
         sra.submitShares(0);
 
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 900e18, "post-submit aggregated matches final value");
+        assertEq(
+            FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 900e18, "post-submit aggregated matches final value"
+        );
 
         // shares proportional to USD: a:b = 600:300 = 2:1, Σ == 1e18 (largest-remainder tops up the larger remainder a)
         Share[] memory shares = rewardActor().getShares(SERVICE_ID);
