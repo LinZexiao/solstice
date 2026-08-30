@@ -1247,8 +1247,7 @@ contract FVMRewardActorTest is MockRewardTest {
     // Regression: FVMCallActorByIdWithReward must not break existing actor mocks
     // -------------------------------------------------------------------------
 
-    // Exercises _handleBurn's balance debit through the new dispatcher -- would break if the
-    // forward to FVMCallActorById used `call` instead of `delegatecall`.
+    // Exercises _handleBurn's balance debit through the new dispatcher (delegatecall keeps the caller's balance context).
     function test_Regression_Burn_StillDebitsCallerBalance() public {
         uint256 before = address(this).balance;
         assertEq(BURN_ADDRESS.balance, 0);

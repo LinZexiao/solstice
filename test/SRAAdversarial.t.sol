@@ -3,7 +3,7 @@ pragma solidity ^0.8.36;
 
 // Adversarial input matrix for the external write surface (S1, QA system fix)
 //
-// Background: the V1/V2/V3 overflow audit (docs/sra-design.md §4.3.10) exposed a
+// Background: the V1/V2/V3 overflow audit exposed a
 // structural QA gap — every verification layer (deterministic/fuzz/invariant/
 // differential) exercised inputs inside the "business domain" and none probed
 // malicious extreme inputs. This suite is the adversarial layer (S1): for each
@@ -419,7 +419,7 @@ contract SRAAdversarial is SRATestBase {
     }
 
     /// A no-volume quarter must not deadlock the system — q0 has volume,
-    /// q1 is a gap, q2 must still accept writes (previously reverted InvalidParameter forever).
+    /// q1 is a gap, q2 must still accept writes.
     function test_GapQuarter_NoDeadlock() public {
         address a = makeAddr("a");
         address b = makeAddr("b");
@@ -431,7 +431,7 @@ contract SRAAdversarial is SRATestBase {
 
         // Q1: nobody writes (all SPs have zero volume) — the gap.
         vm.roll(_qEnd(2) + 1); // Q2 posting window
-        _postAs(b, 2, _fpv(50e18)); // must succeed (previously InvalidParameter)
+        _postAs(b, 2, _fpv(50e18)); // must succeed
         assertEq(FixedU18.unwrap(sra.fpvOf(2, b).usd), 50e18, "post-gap write succeeds");
         assertEq(FixedU18.unwrap(sra.fpvOf(1, a).usd), 0, "gap quarter: prevFpv zero for q0's contributor");
         assertEq(FixedU18.unwrap(sra.fpvOf(1, b).usd), 0, "gap quarter: prevFpv zero for the new writer too");

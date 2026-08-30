@@ -288,7 +288,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
     /// correctVolume backfill advancing the quarter must not leak the previous quarter's value
     /// into the new quarter's counter: the old value is read *after* the advance,
-    /// so a backfill with value < oldUsd no longer underflows and value > oldUsd lands exactly.
+    /// so a backfill with value < oldUsd must not underflow and value > oldUsd lands exactly.
     function test_Mirror_CorrectVolume_Advance_NoLeak() public {
         address a = makeAddr("a");
         address b = makeAddr("b");
@@ -310,7 +310,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(1)), 350e18); // 50 + 300, no leak from q0
     }
 
-    /// Spec §3.2/§4.4 timing guard: RemoveOrchestrator reverts while a bound quarter awaits its
+    /// Spec §3.2 timing guard: RemoveOrchestrator reverts while a bound quarter awaits its
     /// share map — from the end of a quarter until that quarter's SubmitShares has run. A lag-window
     /// remove (q0 bound, map not submitted) must revert PendingShares(0); after submitShares(0)
     /// clears the pending quarter the same removal succeeds. This also guarantees the submitted map
@@ -439,7 +439,9 @@ contract SRAggregateMirrorTest is SRATestBase {
         _remove(b); // still within E+POST (hold 100 < POST 300): contribution excluded
 
         vm.roll(_qVerifyEnd(0) + 1); // Q0 binds — aggregate readable
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18, "removed pre-E+POST FilecoinPayVolume excluded");
+        assertEq(
+            FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18, "removed pre-E+POST FilecoinPayVolume excluded"
+        );
     }
 
     /// Once the verification window closes, AggregatedFilecoinPayVolume(activeQ) is a fixed binding
@@ -489,7 +491,11 @@ contract SRAggregateMirrorTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1, "removed orchestrator absent from the map");
         assertEq(shares[0].wallet, a, "map = a only");
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18, "removed FilecoinPayVolume excluded -- consistent with map");
+        assertEq(
+            FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)),
+            100e18,
+            "removed FilecoinPayVolume excluded -- consistent with map"
+        );
     }
 
     /// A gap quarter (no writes, zero volume) submits as an all-zero no-op — the mirror

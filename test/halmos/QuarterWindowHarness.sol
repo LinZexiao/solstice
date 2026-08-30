@@ -10,12 +10,12 @@ import {Epoch} from "../../src/lib/Epoch.sol";
 ///      implementation itself.
 ///      Constructor parameters match the production config in test/SRATestBase.sol (Q=1000/P=300/V=400/
 ///      ACTIVATION=100000), verifying the window semantics under the production config.
-///      Deployment: the check contract directly inherits this harness (the pattern verified in t8); when running
+///      Deployment: the check contract directly inherits this harness; when running
 ///      halmos with --no-test-constructor the constructor is skipped — note: after skipping the constructor the
 ///      immutable window constants (Q/P/V/ACTIVATION) get symbolized by halmos as free variables (no concrete
 ///      values), so the propositions verified by this harness are all "parameter-independent properties"
 ///      (mathematical properties holding under any window config); absolute boundary membership depending on
-///      concrete parameter values is covered by dynamic tests (see .ghost/references/015-sra-statemachine-verification.md §4 limitation 1).
+///      concrete parameter values is covered by dynamic tests.
 ///      The E+POST exclusion is a stored flag (frozenAtPostEnd) — there is no per-epoch
 ///      interval-search function to verify; the E+POST semantics is covered by dynamic tests.
 contract QuarterWindowHarness is ServiceRewardsActor {

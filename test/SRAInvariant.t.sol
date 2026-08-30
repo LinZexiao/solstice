@@ -8,7 +8,7 @@ pragma solidity ^0.8.36;
 //      the f02 share map Σ is always == 1e18
 //   I2 Binding uniqueness: any (payer, operator) pair always has at most 1 valid bound orchestrator;
 //      the handler-recorded last binder (resolved along the replace chain) must == sra.bindingOf()
-//      — the T6 bug (third-party grab after replace) is exactly the kind of invariant this breaks
+//      — a third-party grab after replace is exactly the kind of invariant this breaks
 //   I3 Governance consistency: the approved bitmask is consistent with orchestrator state —
 //      parked tasks (two votes, not executed) have a non-zero bitmask and state not landed;
 //      executed tasks have a zeroed bitmask (deleted after execution); handler-expected state == sra actual
@@ -87,10 +87,10 @@ contract SRAInvariantHandler is SRATestBase {
 
     bool internal _everSubmitted;
 
-    // ---- A2/A3: POST-instant freeze snapshot + usdValue tracking (aligned with the implementation's freezeEpochs/unfreezeEpochs semantics) ----
-    /// @dev freeze effective epoch list (implementation freeze pushes currentEpoch()); paired with _unfreezeAt as half-open intervals.
+    // ---- A2/A3: POST-instant freeze snapshot + usdValue tracking (mirror of the implementation's frozenSince timing) ----
+    /// @dev freeze effective epoch list (the handler replays the implementation's frozenSince transitions); paired with _unfreezeAt as half-open intervals.
     mapping(address => uint64[]) internal _freezeAt;
-    /// @dev unfreeze effective epoch list (implementation unfreeze pushes currentEpoch()).
+    /// @dev unfreeze effective epoch list (mirror of the frozenSince transitions).
     mapping(address => uint64[]) internal _unfreezeAt;
 
     /// @dev quarter and POST-instant snapshot of the most recent successful submitShares (read by invariants A2/A3).
@@ -139,8 +139,8 @@ contract SRAInvariantHandler is SRATestBase {
         _recordExecuted(taskId);
     }
 
-    /// @notice Atomic remove: releases the slot and frozen state; the implementation's remove explicitly clears successor, the handler must sync (I2).
-    /// @dev Spec §3.2/§4.4 timing guard: remove reverts while a bound quarter awaits its share map. The handler
+    /// @notice Atomic remove: releases the slot and frozen state; the handler must sync its own bookkeeping (I2).
+    /// @dev Spec §3.2 timing guard: remove reverts while a bound quarter awaits its share map. The handler
     ///      mirrors the spec's governance procedure — clear any pending quarter by cranking SubmitShares first
     ///      (permissionless + idempotent; quarters beyond MAX_Q are never bound here), so the guard passes.
     ///      The crank keeps the A2/A3 snapshot bookkeeping in sync with the contract.
@@ -176,7 +176,7 @@ contract SRAInvariantHandler is SRATestBase {
         vm.roll(block.number + SRA_CANCEL_HOLD);
         sra.freeze(orch);
         _frozen[orch] = true;
-        _freezeAt[orch].push(uint64(block.number)); // implementation freeze pushes currentEpoch()
+        _freezeAt[orch].push(uint64(block.number));
         _recordExecuted(taskId);
     }
 
@@ -192,7 +192,7 @@ contract SRAInvariantHandler is SRATestBase {
         vm.roll(block.number + SRA_CANCEL_HOLD);
         sra.unfreeze(orch);
         _frozen[orch] = false;
-        _unfreezeAt[orch].push(uint64(block.number)); // implementation unfreeze pushes currentEpoch()
+        _unfreezeAt[orch].push(uint64(block.number));
         _recordExecuted(taskId);
     }
 
@@ -617,7 +617,7 @@ contract SRAInvariantTest is Test {
 
     /// I2 Binding uniqueness: every pair's bindingOf must == the handler-recorded last binder
     /// (synced on replace — the id-keyed model re-points the wallet, so bindingOf returns the new wallet directly).
-    /// Catches: the T6 bug (third-party grabbing the same pair after replace, overwriting the binding),
+    /// Catches: a third-party grab of the same pair after replace (overwriting the binding),
     ///        registerPairs bypassing the uniqueness check, reassignBinding writes inconsistent with the record.
     function invariant_OneBindingPerPair() public view {
         uint256 n = handler.knownPairsLength();
@@ -684,7 +684,7 @@ contract SRAInvariantTest is Test {
         }
     }
 
-    /// A3 All-zero no-op (FIP-0118 FIPs#1275, replacing D1 burn): in the most recent submit quarter,
+    /// A3 All-zero no-op (FIP-0118 FIPs#1275): in the most recent submit quarter,
     /// if the Σ of non-frozen with usd>0 at the POST instant is 0 -> submitShares is a benign no-op:
     /// SplitRule is not evaluated and the existing share map stands (covered by the SRAShares unit
     /// tests; here the invariant only needs to assert the map stays valid for the Σ>0 branch).

@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// SRA share computation tests — covers design §3 strategies 1 (share rounding) / 3 (freeze-semantics snapshot) /
-//   4 (all-zero benign no-op, FIPs#1275 replacing D1 burn) / 10 (SetShares encoding) / 12 (f02 mock driving)
+// SRA share computation tests — share rounding / freeze-semantics snapshot /
+//   all-zero benign no-op (FIPs#1275) / SetShares encoding / f02 mock driving
 //
 // Verification means: after submitShares, read the mock's getShares(2) (the f02 service stream's share map).
 // Mock validation: stream exists/EXPLICIT/writer permission/≤64 recipients/Σ==1e18 (see FVMRewardActor._setShares).
@@ -15,10 +15,8 @@ import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 
 contract SRASharesTest is SRATestBase {
-    // T5 fix: _admitAndPost originally used block.number as the makeAddr salt, but _admit's
-    // vm.roll(+SRA_CANCEL_HOLD) changes block.number, and _postAs rolls back to a fixed value
-    // (_qEnd(0)+1) — repeated calls with the same stableUSD would generate the same address -> AlreadyAdmitted.
-    // Switched to an increasing counter to guarantee unique addresses.
+    // block.number is not stable across helper calls (vm.roll), so it cannot seed unique
+    // addresses; an increasing counter guarantees unique makeAddr salts.
     uint256 private _orchSalt;
 
     // ------------------------------------------------------------------------
@@ -99,7 +97,7 @@ contract SRASharesTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Strategy 4: all-zero quarter is a benign no-op (FIP-0118 FIPs#1275, replacing D1 burn)
+    // Strategy 4: all-zero quarter is a benign no-op (FIP-0118 FIPs#1275)
     // ------------------------------------------------------------------------
 
     /// Strategy 4: nobody posted (total=0) -> submitShares is a benign no-op: no SetShares call,
@@ -228,7 +226,6 @@ contract SRASharesTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 3);
         assertEq(_walletShare(shares, a) + _walletShare(shares, b) + _walletShare(shares, c), 1e18);
-        // recipients are the orch addresses (design §2.5.3: wallet = orch address, S7 approved)
         assertTrue(_hasWallet(shares, a));
         assertTrue(_hasWallet(shares, b));
         assertTrue(_hasWallet(shares, c));
@@ -458,21 +455,17 @@ contract SRASharesTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // A2 defect regression: an old address re-admitted after replace must not leak shares to the frozen successor
+    // re-admit after replace must not leak shares to the frozen successor
     // ------------------------------------------------------------------------
 
-    /// A2 regression (real defect, caught by the A2 invariant at t7/t8 acceptance):
-    /// replace(old→new) sets old.successor=new (old becomes an alias) -> on re-`admit(old)`,
-    /// before the fix the successor residual remained -> submitShares's freeze check (_frozenAtPostEnd against old itself,
-    /// not frozen, passes) but the wallet writes _resolve(old)=new (frozen at POST) -> a frozen orchestrator obtains a share
-    /// through the resolve chain (violating S5 freeze snapshot / S7 orch-address-is-wallet).
-    /// Fix (option A): admit identity reset (clears successor/frozen/freeze history) -> re-admit is a fresh identity.
+    /// Re-admit allocates a fresh identity (clears successor/frozen/freeze history), so a
+    /// re-admitted old address cannot route shares to the frozen successor.
     function test_ReAdmit_AfterReplace_FrozenSuccessor_NoShares() public {
         address oldOrch = makeAddr("readmit-old");
         address newOrch = makeAddr("readmit-new");
         _admit(oldOrch);
 
-        // replace(old→new): old invalidated, alias points to new (old.successor = new)
+        // replace(old→new): old invalidated, identity and bindings transfer to new
         vm.prank(owner1);
         sra.replace(oldOrch, newOrch);
         vm.prank(owner2);
@@ -483,7 +476,7 @@ contract SRASharesTest is SRATestBase {
         // freeze(new): new is frozen at q=0's POST instant (freeze takes effect before 100300)
         _freeze(newOrch);
 
-        // re-admit old (before the fix: successor/frozen residual; after the fix: identity reset)
+        // re-admit old: fresh identity (clears successor/frozen/freeze history)
         _admit(oldOrch);
 
         // give old this quarter's FilecoinPayVolume within the verification window
@@ -494,7 +487,7 @@ contract SRASharesTest is SRATestBase {
         sra.submitShares(0);
 
         Share[] memory shares = rewardActor().getShares(SERVICE_ID);
-        // S5: the frozen-at-POST new must not appear in the share map (regardless of any resolve chain)
+        // the frozen-at-POST new must not appear in the share map
         assertEq(_walletShare(shares, newOrch), 0, "frozen successor must not receive shares");
         // old is not frozen and posted -> gets its entire share (the only non-excluded poster)
         assertEq(_walletShare(shares, oldOrch), 1e18, "re-admitted old orchestrator keeps its shares");
@@ -505,8 +498,8 @@ contract SRASharesTest is SRATestBase {
     // id-keyed identity: replace = O(1) wallet re-point (behavioral lock)
     // ------------------------------------------------------------------------
 
-    /// id-keyed identity: replace re-points the wallet — historical quarter FilecoinPayVolume follows the identity
-    /// (the previous address-keyed implementation lost it from the traversal after replace; here it survives by construction).
+    /// id-keyed identity: replace re-points the wallet — historical quarter FilecoinPayVolume
+    /// follows the identity by construction (the id keeps its contributions across the re-point).
     function test_Replace_HistoricalQuarterFilecoinPayVolume_Kept() public {
         address oldOrch = makeAddr("hist-old");
         address newOrch = makeAddr("hist-new");

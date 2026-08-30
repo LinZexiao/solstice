@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// SRA governance flow tests — covers design §3 strategy 6 (governance flow)
+// SRA governance flow tests
 //
 //   - two votes + permissionless execution after SRA_CANCEL_HOLD elapses
 //   - not executable within the hold (HoldUntil revert)
@@ -122,7 +122,7 @@ contract SRAGovernanceTest is SRATestBase {
 
         vm.roll(block.number + SRA_CANCEL_HOLD);
         // the original task was deleted: the third call is a fresh submission (first vote), not an execution
-        // T2 fix: resubmission must be initiated by an owner (the governance library's approve branch requires isOwner)
+        // resubmission must be initiated by an owner (the governance library's approve branch requires isOwner)
         vm.prank(owner1);
         sra.admit(orch);
         assertFalse(sra.isAdmitted(orch));

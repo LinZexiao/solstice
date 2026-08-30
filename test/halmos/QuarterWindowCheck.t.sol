@@ -5,23 +5,17 @@ import {Test} from "forge-std/Test.sol";
 import {Epoch} from "../../src/lib/Epoch.sol";
 import {QuarterWindowHarness} from "./QuarterWindowHarness.sol";
 
-/// @dev Halmos symbolic verification of the quarter state-machine window determination (blind spot 4 closed).
-///      Deployment mode: this contract directly inherits QuarterWindowHarness (the pattern verified in t8); when
+/// @dev Halmos symbolic verification of the quarter state-machine window determination.
+///      Deployment mode: this contract directly inherits QuarterWindowHarness; when
 ///      running halmos with --no-test-constructor the constructor is skipped — but the window constants
 ///      (EPOCHS_PER_QUARTER/POST_PERIOD/VERIFICATION_WINDOW/ACTIVATION_EPOCH) are immutable, and after skipping
 ///      the constructor they get symbolized by halmos as free variables. Therefore this verification focuses on
 ///      **parameter-independent properties** (mathematical properties holding under any window parameters).
-///      ⚠️ halmos 0.1.13 tool limits (confirmed by probe experiments; see .ghost/references/015 report):
-///      1. vm.warp does not work on symbolic parameters -> block.number cannot be symbolized -> window
-///         determination relying on currentEpoch() (posting/verification/binding universal completeness)
-///         cannot be directly symbolically verified
-///      2. storage array element reads after push are wrong (length correct but elements symbolic) ->
-///         _isFrozenAt interval search relying on freeze-history arrays cannot be symbolically verified
-///         with storage-preset data
-///      The limited propositions (T1 completeness/T5 interval search/T6 mutual exclusion) are downgraded to
-///      dynamic test coverage: SRAQuarter.t.sol's 8 window-boundary ±1 cases, SRARegistry freeze/unfreeze in
-///      both directions, invariant A2 random freeze-history exclusion — 100% line coverage guarantees no
-///      unexecuted paths.
+///      Halmos 0.1.13 limits: vm.warp does not work on symbolic parameters, so block.number cannot be
+///      symbolized — window determination relying on currentEpoch() is covered by dynamic tests instead
+///      (SRAQuarter.t.sol window-boundary cases, SRARegistry freeze/unfreeze in both directions, and the
+///      invariant suite's random freeze-history exclusion); storage array element reads after push return
+///      symbolic elements, so freeze-history interval search is also dynamic-test-covered.
 contract QuarterWindowCheck is QuarterWindowHarness, Test {
     // forge-lint: disable-start(mixed-case-function) — halmos runs only check_-prefixed property functions (tool convention)
     /// @dev owner params arbitrary (halmos executes with --no-test-constructor, skipping the constructor; the compiler layer still needs explicit args).

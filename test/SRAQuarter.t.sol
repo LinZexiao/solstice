@@ -2,11 +2,11 @@
 pragma solidity ^0.8.36;
 
 // SRA quarter state machine + FilecoinPayVolume + FIL pricing tests
-//   Covers design §3 strategies 2 (window boundaries) / 7 (CorrectVolume) / 11 (AggregatedFilecoinPayVolume)
-//   FIP-0118 (FIPs#1275): FilecoinPayVolume is a single USD total — strategies 8 (PRICE_BAND) and
-//   9 (FinalizeConversion) are obsolete (off-chain conversion), so their tests are removed.
+//   window boundaries / CorrectVolume / AggregatedFilecoinPayVolume
+//   FIP-0118 (FIPs#1275): FilecoinPayVolume is a single USD total — PRICE_BAND / FinalizeConversion
+//   tests are obsolete after FIPs#1275 (off-chain conversion).
 //
-// Time model: Epoch = block.number; windows (design §2.5.1):
+// Time model: Epoch = block.number; windows:
 //   posting:      E < now <= E+POST
 //   verification: E+POST < now <= E+POST+VERIFY
 //   post-binding: now > E+POST+VERIFY

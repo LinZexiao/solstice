@@ -86,7 +86,8 @@ library OwnersLibrary {
 
     /// @param owner The address to revoke ownership from
     /// @dev A removed owner's bit may be recycled to a future owner by addOwner.
-    /// @dev Veto stale PendingTasks when removing an owner to avoid approvals carrying over.
+    /// @dev Does not veto pending tasks; callers must veto stale PendingTasks before removing an
+    ///      owner, or the freed bit recycles to a future owner carrying the old approvals.
     function removeOwner(address owner) internal {
         require(isOwner(owner), NotOwner(owner));
 

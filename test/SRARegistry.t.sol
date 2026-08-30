@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// SRA registry tests — covers design §3 strategy 3 (freeze semantics) + strategy 5 (cap rejection D2)
+// SRA registry tests — freeze semantics / cap rejection (D2)
 //
 //   - orchestrator admission/cap: 64-full rejection, Remove release, Freeze non-release (D2)
 //   - registerPairs: uniqueness, admission/freeze gating, re-claimable after Remove release
@@ -215,10 +215,10 @@ contract SRARegistryTest is SRATestBase {
         sra.postVolume(0, FixedU18.wrap(_fpv(100e18)));
     }
 
-    /// A2/A3 regression (correctVolume freeze symmetry): a frozen orchestrator cannot be re-admitted
+    /// correctVolume freeze symmetry: a frozen orchestrator cannot be re-admitted
     /// into a quarter via the governance correctVolume path. Freeze suspends — the mirror advance
     /// clears frozenAtPostEnd, so without this gate a freeze → correctVolume → advance sequence
-    /// would give a frozen orchestrator shares in the next quarter (A2/A3 invariant violation).
+    /// would give a frozen orchestrator shares in the next quarter.
     /// Unfreeze restores the governance correction path.
     function test_CorrectVolume_Frozen_Reverts_UnfreezeRestores() public {
         address a = makeAddr("a");
@@ -298,9 +298,8 @@ contract SRARegistryTest is SRATestBase {
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), newOrch);
     }
 
-    /// Strategy 3/T6: after replace, a third party cannot grab the binding pair — registerPairs's AlreadyBound
-    /// check must resolve along the successor chain to the current valid orchestrator (the previous implementation's
-    /// _isAdmitted(current) check on the old address was bypassed by replace; this test was Red before the fix and Green after).
+    /// After replace, a third party cannot grab the binding pair — registerPairs's AlreadyBound
+    /// check resolves along the replace chain to the current valid orchestrator.
     function test_RegisterPairs_AfterReplace_ThirdPartyReverts() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB"); // fresh address: replace target must be unadmitted (auto-admitted on identity transfer)
@@ -323,7 +322,7 @@ contract SRARegistryTest is SRATestBase {
 
         assertTrue(sra.isAdmitted(orchB));
         assertFalse(sra.isAdmitted(orchA));
-        // bindings follow the identity transfer (_resolve chain resolution)
+        // bindings follow the identity transfer (id-keyed: the wallet re-point keeps the binding)
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchB);
 
         // third party orchC tries to grab the same pair -> expect AlreadyBound revert
@@ -360,7 +359,7 @@ contract SRARegistryTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// G6: replace target already admitted (admitted=true) -> AlreadyAdmitted revert at the third execution.
-    /// (The T6 test covers replace target unadmitted + binding transfer; this test covers the "target already admitted" reverse branch)
+    /// (The replace tests cover the target-unadmitted + binding-transfer path; this test covers the "target already admitted" reverse branch)
     function test_Replace_AlreadyAdmittedTarget_Reverts() public {
         address oldOrch = makeAddr("oldOrch");
         address newOrch = makeAddr("newOrch");
@@ -531,19 +530,16 @@ contract SRARegistryTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // A2 defect regression: re-admit = fresh identity (clears frozen/freeze history)
+    // re-admit = fresh identity (clears frozen/freeze history)
     // ------------------------------------------------------------------------
 
-    /// A2 regression (the real defect's second face): replace only touches admitted/successor; old.frozen/
-    /// freezeEpochs/unfreezeEpochs were kept as-is — a previously frozen old address re-admitted with frozen
-    /// state carried in (residual state, breaking the freeze-exclusion semantics).
-    /// Fix (option A): admit identity reset (clears frozen + freeze history) -> after re-admission the old address
-    /// operates as a normal orchestrator, not excluded by historical freezes.
+    /// Re-admit allocates a fresh identity: frozen state and freeze history are cleared, so a
+    /// re-admitted address operates as a normal orchestrator, not excluded by historical freezes.
     function test_ReAdmit_ResetsFrozenState() public {
         address oldOrch = makeAddr("readmit-frozen-old");
         address newOrch = makeAddr("readmit-frozen-new");
         _admit(oldOrch);
-        _freeze(oldOrch); // old frozen (frozen=true + freezeEpochs recorded)
+        _freeze(oldOrch); // old frozen (frozenSince recorded)
 
         // replace(old->new): the frozen state is copied wholesale with the struct to new (identity-transfer semantics)
         vm.prank(owner1);
@@ -556,7 +552,7 @@ contract SRARegistryTest is SRATestBase {
         assertTrue(sra.isAdmitted(newOrch));
         assertFalse(sra.isAdmitted(oldOrch)); // old invalidated (alias)
 
-        // re-admit old: before the fix, frozen residual -> old still frozen; after the fix, identity reset
+        // re-admit old: fresh identity (clears frozen state)
         _admit(oldOrch);
         assertTrue(sra.isAdmitted(oldOrch));
         assertFalse(sra.isFrozen(oldOrch), "re-admit must reset frozen state");

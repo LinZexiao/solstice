@@ -1,25 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// Overflow DoS regression tests — V3 (TDD Red phase, audit findings)
+// Overflow DoS regression tests — 3 overflow-DoS vulnerabilities sharing one root cause:
+// the FilecoinPayVolume input fields had no business-domain upper-bound validation.
 //
-// Background: the SRA audit (PR #24, probe-verified) found 3 overflow-DoS
-// vulnerabilities sharing one root cause: the FilecoinPayVolume input fields had no
-// business-domain upper-bound validation.
-//
-//   V1 — Anchor pollution → network-wide permanent DoS: obsolete after FIPs#1275
+//   Anchor pollution → network-wide permanent DoS: obsolete after FIPs#1275
 //        (the PRICE_BAND anchor/_checkPriceBand are gone — FIL→USD conversion is
 //        off-chain, so no on-chain band arithmetic exists).
-//   V2 — finalizeConversion overflow → quarterly settlement stuck: obsolete after
+//   finalizeConversion overflow → quarterly settlement stuck: obsolete after
 //        FIPs#1275 (no on-chain FIL→USD conversion; _finalizeConversion removed).
-//   V3 — Huge USD total → _computeShares overflow → quarterly settlement stuck:
+//   Huge USD total → _computeShares overflow → quarterly settlement stuck:
 //        still applicable — the single USD total feeds usds[i] * SHARE_TOTAL in
 //        _computeShares; the fix is the MAX_FILECOIN_PAY_VOLUME_USD business-domain bound enforced
 //        at postVolume/correctVolume.
 //
-// Expected fix behavior (locked by these tests, TDD):
-//   - V3: a USD total beyond the business bound is rejected at the entry; a normal
-//         total must let submitShares settle (system stays operational).
+// Expected fix behavior (locked by these tests):
+//   - a USD total beyond the business bound is rejected at the entry; a normal
+//     total must let submitShares settle (system stays operational).
 
 import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {SRATestBase} from "./SRATestBase.sol";

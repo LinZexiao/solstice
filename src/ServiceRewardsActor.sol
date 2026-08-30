@@ -41,8 +41,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     /// @dev D2: admitted orchestrator cap (incl. frozen), matching f02 MAX_RECIPIENTS.
     uint256 private constant MAX_ORCHESTRATORS = 64;
-    uint256 private constant MAX_PAIRS = 64; // registerPairs batch bound, aligns with MAX_ORCHESTRATORS
-    uint256 private constant MAX_ALLOWLIST = 64; // per-allowlist array bound
+    uint256 private constant MAX_PAIRS = 64;
+    uint256 private constant MAX_ALLOWLIST = 64;
 
     /// @notice quarterly orchestrator volume is limited to 1 trillion
     /// @dev protects against overflow in _computeShares
@@ -81,9 +81,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
     error NotInVerificationWindow(uint64 q);
     error NotBound(uint64 q);
     error AlreadyPosted(uint64 q);
-    error AlreadySubmitted(uint64 q); // FIP: SubmitShares reverts once a quarter's map is submitted
+    error AlreadySubmitted(uint64 q);
     error NotLatestQuarter(uint64 q); // FIP-0118 §4.2: an older quarter's shares can never overwrite a newer quarter's
-    error PendingShares(uint64 q); // FIP-0118 §3.2/§4.4: RemoveOrchestrator reverts while an ended quarter awaits its share map
+    error PendingShares(uint64 q); // FIP-0118 §3.2: RemoveOrchestrator reverts while an ended quarter awaits its share map
     error TooManyPairs(); // registerPairs batch exceeds MAX_PAIRS
     error InvalidParameter();
 
@@ -133,7 +133,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     // ------------------------------------------------------------------------
-    // Window and quarter utilities (design §2.5.1: Epoch = block.number)
+    // Window and quarter utilities
     // ------------------------------------------------------------------------
 
     /// @dev reverts with InvalidParameter on uint64 overflow
@@ -165,7 +165,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     /// @dev The latest quarter whose volumes are bound but whose share map has not been submitted
-    ///      (spec §3.2/§4.4: RemoveOrchestrator is not callable while an ended quarter awaits its
+    ///      (spec §3.2: RemoveOrchestrator is not callable while an ended quarter awaits its
     ///      share map — governance clears it by cranking SubmitShares first). Mirrors submitShares'
     ///      latest-bound-quarter determination: the latest bound quarter is activeQ if it has passed
     ///      binding, else activeQ - 1 (an advance into a new quarter implies the previous one is past
@@ -240,10 +240,10 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     // ------------------------------------------------------------------------
-    // 2.3.1 Orchestrator operations (called by self, no governance)
+    // Orchestrator operations (called by self, no governance)
     // ------------------------------------------------------------------------
 
-    /// @notice An admitted, non-frozen orchestrator declares binding pairs; reverts if the pair is already bound to another (uniqueness, spec §3.3).
+    /// @notice An admitted, non-frozen orchestrator declares binding pairs; reverts if the pair is already bound to another (uniqueness).
     /// @dev C1: parameter uses a named struct Binding[] (inline tuple-array params are illegal in Solidity).
     function registerPairs(Binding[] calldata pairs) external {
         require(pairs.length <= MAX_PAIRS, TooManyPairs()); // batch bound
@@ -299,7 +299,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     // ------------------------------------------------------------------------
-    // 2.3.2 Governance operations (dual Safe + SRA_CANCEL_HOLD, unanimous path)
+    // Governance operations (dual Safe + SRA_CANCEL_HOLD, unanimous path)
     // ------------------------------------------------------------------------
 
     /// @notice Admits an orchestrator; rejects when admitted total >= 64 (D2).
@@ -322,7 +322,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     /// @notice Permanent removal; releases all bindings (pairs return to unclaimed) (spec §4.2).
-    /// @dev Timing guard (spec §3.2/§4.4): RemoveOrchestrator reverts while an ended quarter awaits
+    /// @dev Timing guard (spec §3.2): RemoveOrchestrator reverts while an ended quarter awaits
     ///      its share map — from the end of a quarter until that quarter's SubmitShares has run.
     ///      This guarantees the submitted map's collection (current admitted ids + prevFpv/fpv
     ///      snapshot) is always consistent with the quarter counter: no removal can bind between the
@@ -452,7 +452,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         emit AdmittedListsUpdated(stablecoins, filecoinPayContracts);
     }
 
-    /// @notice Updates the FIL pricing parameters MIN_LOT/PRICE_BAND (spec §3.3/§5.2).
+    /// @notice Updates the FIL pricing parameters MIN_LOT/PRICE_BAND.
     ///         FIPs#1275: authoritative for the off-chain indexer's conversion, not an on-chain computation.
     function setPricingParams(uint256 minLot, uint256 priceBand)
         external
@@ -471,11 +471,11 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     // ------------------------------------------------------------------------
-    // 2.3.3 correctVolume (dual Safe + effective immediately within the window, unanimousNoHold path)
+    // correctVolume (dual Safe + effective immediately within the window, unanimousNoHold path)
     // ------------------------------------------------------------------------
 
     /// @notice Only within the verification window, dual-Safe joint; replaces the posted value with the recomputed figure,
-    ///         or supplies the recomputed figure for an unposted orchestrator; exempt from SRA_CANCEL_HOLD (spec §4.2/§5.3
+    ///         or supplies the recomputed figure for an unposted orchestrator; exempt from SRA_CANCEL_HOLD (spec §4.2
     ///         window-is-hold), allows bidirectional correction. Value is a single USD total (FIP-0118 FIPs#1275).
     /// @dev The unanimousNoHold modifier handles dual-Safe owner validation; the function body validates the verification window.
     function correctVolume(address orch, uint64 q, FixedU18 value) external unanimousNoHold(keccak256(msg.data)) {
@@ -518,12 +518,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     // ------------------------------------------------------------------------
-    // 2.3.4 Mechanism operations (permissionless)
+    // Mechanism operations (permissionless)
     // ------------------------------------------------------------------------
 
     /// @notice Permissionless after binding; SplitRule over the bound USD values → f02.SetShares(2, map) (spec §4.2).
     ///         Reverts when this quarter's map has already been submitted (FIP-0118 §4.2); an all-zero quarter is a
-    ///         benign no-op: SplitRule is not evaluated and the existing share map stands (FIPs#1275, replacing D1 burn).
+    ///         benign no-op: SplitRule is not evaluated and the existing share map stands (FIPs#1275).
     function submitShares(uint64 q) external {
         require(_afterBinding(q), NotBound(q));
         // FIP-0118 §4.2: SubmitShares operates on the **latest** quarter whose volumes are bound, so an
@@ -599,7 +599,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     // ------------------------------------------------------------------------
-    // 2.3.5 Read-only (for SWA and external audit)
+    // Read-only (for SWA and external audit)
     // ------------------------------------------------------------------------
 
     // forge-lint: disable-next-item(mixed-case-function) — FIP-0118 spec method name (selector-affecting)
@@ -669,7 +669,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // Internal logic
     // ------------------------------------------------------------------------
 
-    /// @dev SplitRule share computation: floor + largest-remainder method (design §2.5.3, T1: remainder descending, first residue entries +1).
+    /// @dev SplitRule share computation: floor + largest-remainder (remainder descending, first residue entries +1).
     ///      Writes the share field of each entry in place; the wallet field is filled by the caller.
     function _computeShares(Share[] memory shares, uint256 n, FixedU18 total) internal pure {
         uint256[] memory remainders = new uint256[](n);

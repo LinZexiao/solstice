@@ -3,16 +3,13 @@ pragma solidity ^0.8.36;
 
 // SRA test common base (test-first contract anchor)
 //
-// This file is the SRA contract interface contract derived by the tester from design doc
-// docs/sra-design.md §2.3/§2.4. ServiceRewardsActor.sol was not yet implemented (Red phase);
-// the coder's implementation must match exactly the signatures, types, and constructor
-// parameters referenced in this file.
+// This file is the SRA contract interface anchor: it pins the exact signatures, types,
+// and constructor parameters the implementation must match.
 //
-// ⚠️ Test assumptions (points not fully determined in the design; must be aligned by
-// coder/designer, see docs/sra-design.md §4.5):
-//   H-ctor : the constructor signature (9 params) is a test design derivation (✏️)
-//   H-fpv  : FilecoinPayVolume is a single USD total (FIP-0118 FIPs#1275: off-chain conversion)
-//   H-band : PRICE_BAND in basis points (2000 = allows ±20% deviation); authoritative for the off-chain indexer
+// Test assumptions:
+//   the constructor signature (9 params) is a test-side derivation
+//   FilecoinPayVolume is a single USD total (FIP-0118 FIPs#1275: off-chain conversion)
+//   PRICE_BAND in basis points (2000 = allows ±20% deviation); authoritative for the off-chain indexer
 
 import {SafeProxy} from "@safe/proxies/SafeProxy.sol";
 
@@ -28,10 +25,6 @@ import {FVMRewards} from "../src/lib/FVMRewards.sol";
 import {SWA_TIMELOCK} from "../src/lib/FVMRewardMethod.sol";
 
 /// @notice Common test base: deploys the SRA, builds Safe owners, registers service stream 2, quarterly time utilities.
-/// @dev ⚠️ Conflict record: the design's §2.3.1 registerPairs signature `(address payer, address operator)[]`
-/// inline tuple arrays are illegal in Solidity 0.8.36 ("Expected type name") — this test uses ServiceRewardsActor's
-/// named struct `Binding` instead (field names payer/operator match the design; ABI encoding is still a tuple array).
-/// The coder should implement SRA with `registerPairs(Binding[] calldata pairs)` or an equivalent named struct.
 contract SRATestBase is MockRewardTest {
     ServiceRewardsActor internal sra;
     address internal owner1;
