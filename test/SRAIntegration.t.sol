@@ -2,11 +2,11 @@
 pragma solidity ^0.8.36;
 
 // ============================================================================
-// SRA integration contract tests — simulate the SWA QuarterlyGateCheck consumption chain of aggregatedFPV
+// SRA integration contract tests — simulate the SWA QuarterlyGateCheck consumption chain of aggregatedFilecoinPayVolume
 //
-// Background: FIPs#1275 moved the FIL→USD conversion off-chain — FPV is a single USD total, the
-// on-chain FinalizeConversion is gone, and aggregatedFPV is a pure view (no finalize to trigger).
-// These tests lock the contract "aggregatedFPV (view) == submitShares's internal total — no divergence"
+// Background: FIPs#1275 moved the FIL→USD conversion off-chain — FilecoinPayVolume is a single USD total, the
+// on-chain FinalizeConversion is gone, and aggregatedFilecoinPayVolume is a pure view (no finalize to trigger).
+// These tests lock the contract "aggregatedFilecoinPayVolume (view) == submitShares's internal total — no divergence"
 // (the property the spec's "execution order produces no diverging numbers" clause requires).
 // ============================================================================
 
@@ -19,8 +19,8 @@ contract SRAIntegrationTest is SRATestBase {
     uint256 private _salt;
 
     // ------------------------------------------------------------------------
-    // Scenario 1 (core): the gating consumer reads aggregatedFPV first -> submitShares's
-    // SharesSubmitted.totalUsd strictly equals aggregatedFPV (no divergence).
+    // Scenario 1 (core): the gating consumer reads aggregatedFilecoinPayVolume first -> submitShares's
+    // SharesSubmitted.totalUsd strictly equals aggregatedFilecoinPayVolume (no divergence).
     // ------------------------------------------------------------------------
 
     /// Orchestrator a: 600e18 USD; orchestrator b: 300e18 USD. total = 900e18.
@@ -30,16 +30,16 @@ contract SRAIntegrationTest is SRATestBase {
 
         _rollTo(_qVerifyEnd(0) + 1); // post-binding
 
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 900e18, "aggregatedFPV sums the bound USD values");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 900e18, "aggregatedFilecoinPayVolume sums the bound USD values");
 
-        // no divergence: submitShares's internal total must == aggregatedFPV (expectEmit captures totalUsd)
+        // no divergence: submitShares's internal total must == aggregatedFilecoinPayVolume (expectEmit captures totalUsd)
         vm.expectEmit(true, false, false, true, address(sra));
         emit ServiceRewardsActor.SharesSubmitted(0, 2, FixedU18.wrap(900e18));
         sra.submitShares(0);
     }
 
     // ------------------------------------------------------------------------
-    // Scenario 2: after submitShares, subsequent reads of aggregatedFPV are consistent.
+    // Scenario 2: after submitShares, subsequent reads of aggregatedFilecoinPayVolume are consistent.
     // ------------------------------------------------------------------------
 
     function test_Contract_SubmitShares_ThenReadConsistent() public {
@@ -50,7 +50,7 @@ contract SRAIntegrationTest is SRATestBase {
 
         sra.submitShares(0);
 
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 900e18, "post-submit aggregated matches final value");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 900e18, "post-submit aggregated matches final value");
 
         // shares proportional to USD: a:b = 600:300 = 2:1, Σ == 1e18 (largest-remainder tops up the larger remainder a)
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
@@ -61,14 +61,14 @@ contract SRAIntegrationTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Scenario 3: aggregatedFPV is a pure view — it returns the complete value with no
+    // Scenario 3: aggregatedFilecoinPayVolume is a pure view — it returns the complete value with no
     // state change (FIPs#1275: no on-chain finalize to trigger).
     // ------------------------------------------------------------------------
 
-    function test_Contract_AggregatedFPV_PureView() public {
+    function test_Contract_AggregatedFilecoinPayVolume_PureView() public {
         _admitAndPost(100e18);
         _rollTo(_qVerifyEnd(0) + 1); // post-binding
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18, "view equals the bound value");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18, "view equals the bound value");
     }
 
     // ------------------------------------------------------------------------

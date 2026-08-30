@@ -263,7 +263,7 @@ contract SRASharesTest is SRATestBase {
     // helpers
     // ------------------------------------------------------------------------
 
-    /// @dev Admits and (in the current posting window) posts a pure-stablecoin FPV; returns the orchestrator address.
+    /// @dev Admits and (in the current posting window) posts a pure-stablecoin FilecoinPayVolume; returns the orchestrator address.
     function _admitAndPost(uint256 stableUsd) internal returns (address orch) {
         orch = makeAddr(string.concat("orch-", vm.toString(_orchSalt++))); // T5: increasing salt for unique addresses
         _admit(orch);
@@ -488,7 +488,7 @@ contract SRASharesTest is SRATestBase {
         // re-admit old (before the fix: successor/frozen residual; after the fix: identity reset)
         _admit(oldOrch);
 
-        // give old this quarter's FPV within the verification window
+        // give old this quarter's FilecoinPayVolume within the verification window
         vm.roll(_qPostEnd(0) + 1);
         _correctVolume(oldOrch, 0, _fpv(100e18));
 
@@ -507,9 +507,9 @@ contract SRASharesTest is SRATestBase {
     // id-keyed identity: replace = O(1) wallet re-point (behavioral lock)
     // ------------------------------------------------------------------------
 
-    /// id-keyed identity: replace re-points the wallet — historical quarter FPV follows the identity
+    /// id-keyed identity: replace re-points the wallet — historical quarter FilecoinPayVolume follows the identity
     /// (the previous address-keyed implementation lost it from the traversal after replace; here it survives by construction).
-    function test_Replace_HistoricalQuarterFPV_Kept() public {
+    function test_Replace_HistoricalQuarterFilecoinPayVolume_Kept() public {
         address oldOrch = makeAddr("hist-old");
         address newOrch = makeAddr("hist-new");
         _admit(oldOrch);
@@ -525,16 +525,16 @@ contract SRASharesTest is SRATestBase {
         vm.roll(block.number + SRA_CANCEL_HOLD);
         sra.replace(oldOrch, newOrch);
 
-        // submit q0 after binding: the old address's posted FPV is still aggregated under the same identity
+        // submit q0 after binding: the old address's posted FilecoinPayVolume is still aggregated under the same identity
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1);
-        assertEq(_walletShare(shares, newOrch), 1e18, "historical FPV follows the identity to the new wallet");
+        assertEq(_walletShare(shares, newOrch), 1e18, "historical FilecoinPayVolume follows the identity to the new wallet");
         assertEq(_sumShares(shares), 1e18);
 
-        // aggregatedFPV agrees: the historical quarter's volume is not lost
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18);
+        // aggregatedFilecoinPayVolume agrees: the historical quarter's volume is not lost
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
     }
 
     /// The share map is always written to the *current* wallet — after replace, newOrch receives the shares and
@@ -565,7 +565,7 @@ contract SRASharesTest is SRATestBase {
     }
 
     /// After replace, governance correctVolume must address the *new* wallet — the id-keyed model routes it to
-    /// the same identity, so a verification-window correction of the historical quarter hits the right FPV record.
+    /// the same identity, so a verification-window correction of the historical quarter hits the right FilecoinPayVolume record.
     function test_Replace_CorrectVolume_NewAddress_CorrectsHistoricalQuarter() public {
         address oldOrch = makeAddr("cv-old");
         address newOrch = makeAddr("cv-new");
@@ -590,6 +590,6 @@ contract SRASharesTest is SRATestBase {
         assertEq(shares.length, 1);
         assertEq(_walletShare(shares, newOrch), 1e18);
         // the corrected value (200), not the original post (100), is aggregated
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 200e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
     }
 }

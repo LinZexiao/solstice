@@ -277,7 +277,7 @@ contract SRAInvariantHandler is SRATestBase {
     // Business operations (posting / verification / bound windows, explicit roll)
     // ========================================================================
 
-    /// @notice An orchestrator posts a pure-stablecoin FPV (no FIL periods, bypassing PRICE_BAND complexity).
+    /// @notice An orchestrator posts a pure-stablecoin FilecoinPayVolume (no FIL periods, bypassing PRICE_BAND complexity).
     function postVolume(uint256 q, uint256 orchIdx, uint256 usd) external {
         uint64 qq = uint64(bound(q, 0, MAX_Q));
         address orch = _pickOrch(orchIdx);
@@ -298,7 +298,7 @@ contract SRAInvariantHandler is SRATestBase {
         address orch = _pickOrch(orchIdx);
         if (!sra.isAdmitted(orch)) return;
         if (sra.isFrozen(orch)) return; // freeze symmetry: the implementation's correctVolume gates on frozenSince (A2/A3 fix)
-        // S3: bound(1, 1e30) aligns with the code-enforced MAX_FPV_USD (correctVolume rejects > 1e30).
+        // S3: bound(1, 1e30) aligns with the code-enforced MAX_FILECOIN_PAY_VOLUME_USD (correctVolume rejects > 1e30).
         uint256 stableUsd = bound(usd, 1, 1e30);
         uint256 target = _qPostEnd(qq) + 1 + uint64(bound(usd, 0, VERIFICATION_WINDOW - 1));
         if (block.number < target) vm.roll(target); // monotonic

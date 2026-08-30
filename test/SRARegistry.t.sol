@@ -13,7 +13,7 @@ pragma solidity ^0.8.36;
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
-import {Binding, FPV} from "../src/lib/SraTypes.sol";
+import {Binding, FilecoinPayVolume} from "../src/lib/SraTypes.sol";
 
 /// @dev ERC-7201 Registry namespace slot (src/lib/SraStorage.sol) — the id allocator lives at
 ///      REGISTRY_SLOT + 3 (low 64 bits = nextId). The test reads it directly because the id is
@@ -268,7 +268,7 @@ contract SRARegistryTest is SRATestBase {
         _registerPairsAs(orch, pairs); // can register after restore
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18)); // can post after restore
-        FPV memory f = sra.fpvOf(0, orch);
+        FilecoinPayVolume memory f = sra.fpvOf(0, orch);
         assertEq(FixedU18.unwrap(f.usd), 100e18);
     }
 
@@ -566,7 +566,7 @@ contract SRARegistryTest is SRATestBase {
         // after re-admission old operates as a normal orchestrator (postVolume not excluded by freeze history)
         vm.roll(_qEnd(1) + 1); // quarter 1 posting window
         _postAs(oldOrch, 1, _fpv(100e18)); // not reverting proves normal operation
-        FPV memory f = sra.fpvOf(1, oldOrch);
+        FilecoinPayVolume memory f = sra.fpvOf(1, oldOrch);
         assertEq(FixedU18.unwrap(f.usd), 100e18);
     }
 
@@ -575,9 +575,9 @@ contract SRARegistryTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// id-keyed identity: re-admit of a removed address allocates a fresh id — the removed identity's bindings
-    /// (pair bound by the old id) and FPV do not carry over. The pair stays claimable and the fresh id's quarter
+    /// (pair bound by the old id) and FilecoinPayVolume do not carry over. The pair stays claimable and the fresh id's quarter
     /// record is empty (the old record lives on only under the archived id, unreachable from the address).
-    function test_ReAdmit_FreshIdentity_NoBindingsNoFPV() public {
+    function test_ReAdmit_FreshIdentity_NoBindingsNoFilecoinPayVolume() public {
         address oldOrch = makeAddr("fresh-old");
         address third = makeAddr("fresh-third");
         _admit(oldOrch);
@@ -603,8 +603,8 @@ contract SRARegistryTest is SRATestBase {
         _registerPairsAs(third, pairs); // no revert -> the old id's binding is not inherited
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), third);
 
-        // the removed identity's FPV does not carry over: the fresh id's quarter-0 record is empty
-        FPV memory f = sra.fpvOf(0, oldOrch);
+        // the removed identity's FilecoinPayVolume does not carry over: the fresh id's quarter-0 record is empty
+        FilecoinPayVolume memory f = sra.fpvOf(0, oldOrch);
         assertEq(FixedU18.unwrap(f.usd), 0);
     }
 

@@ -10,7 +10,7 @@ pragma solidity ^0.8.36;
 //
 //   ⚠️ FIPs#1275 deviation from the generator: the bandCases()/aggCases() data and their helper structs
 //   (Period/Orch/AggCase/BandCase) were removed here — the PRICE_BAND machinery is gone (no on-chain band
-//   determination) and FPV aggregation collapses to a simple sum covered by the integration tests. Only
+//   determination) and FilecoinPayVolume aggregation collapses to a simple sum covered by the integration tests. Only
 //   shareCases() remains active (largest-remainder core). Re-running the generator would restore them.
 // ============================================================================
 

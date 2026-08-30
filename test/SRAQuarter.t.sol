@@ -2,9 +2,9 @@
 pragma solidity ^0.8.36;
 
 // ============================================================================
-// SRA quarter state machine + FPV + FIL pricing tests
-//   Covers design §3 strategies 2 (window boundaries) / 7 (CorrectVolume) / 11 (AggregatedFPV)
-//   FIP-0118 (FIPs#1275): FPV is a single USD total — strategies 8 (PRICE_BAND) and
+// SRA quarter state machine + FilecoinPayVolume + FIL pricing tests
+//   Covers design §3 strategies 2 (window boundaries) / 7 (CorrectVolume) / 11 (AggregatedFilecoinPayVolume)
+//   FIP-0118 (FIPs#1275): FilecoinPayVolume is a single USD total — strategies 8 (PRICE_BAND) and
 //   9 (FinalizeConversion) are obsolete (off-chain conversion), so their tests are removed.
 //
 // Time model: Epoch = block.number; windows (design §2.5.1):
@@ -16,7 +16,7 @@ pragma solidity ^0.8.36;
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
-import {FPV} from "../src/lib/SraTypes.sol";
+import {FilecoinPayVolume} from "../src/lib/SraTypes.sol";
 
 contract SRAQuarterTest is SRATestBase {
     // ------------------------------------------------------------------------
@@ -30,7 +30,7 @@ contract SRAQuarterTest is SRATestBase {
 
         vm.roll(_qEnd(0) + 1); // E+1
         _postAs(orch, 0, _fpv(100e18));
-        FPV memory f = sra.fpvOf(0, orch);
+        FilecoinPayVolume memory f = sra.fpvOf(0, orch);
         assertEq(FixedU18.unwrap(f.usd), 100e18);
     }
 
@@ -105,7 +105,7 @@ contract SRAQuarterTest is SRATestBase {
 
         vm.roll(_qVerifyEnd(0) + 1); // post-binding
         assertEq(FixedU18.unwrap(sra.fpvOf(0, orch).usd), 0);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 0);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 0);
     }
 
     // ------------------------------------------------------------------------
@@ -192,11 +192,11 @@ contract SRAQuarterTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Strategy 11: AggregatedFPV (read-only bound value)
+    // Strategy 11: AggregatedFilecoinPayVolume (read-only bound value)
     // ------------------------------------------------------------------------
 
-    /// Strategy 11: aggregatedFPV reverts NotBound before the window closes (distinguishable from zero declared volume).
-    function test_AggregatedFPV_BeforeBinding_RevertsNotBound() public {
+    /// Strategy 11: aggregatedFilecoinPayVolume reverts NotBound before the window closes (distinguishable from zero declared volume).
+    function test_AggregatedFilecoinPayVolume_BeforeBinding_RevertsNotBound() public {
         address orch = makeAddr("orch");
         _admit(orch);
         vm.roll(_qEnd(0) + 1);
@@ -204,14 +204,14 @@ contract SRAQuarterTest is SRATestBase {
 
         // Revert NotBound during posting/verification (not bound) — the SWA can distinguish this from a zero-volume quarter
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.NotBound.selector, 0));
-        sra.aggregatedFPV(0);
+        sra.aggregatedFilecoinPayVolume(0);
         vm.roll(_qVerifyEnd(0));
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.NotBound.selector, 0));
-        sra.aggregatedFPV(0);
+        sra.aggregatedFilecoinPayVolume(0);
     }
 
-    /// Strategy 11: after binding aggregatedFPV = Σ each orchestrator's bound USD value (pure view, FIPs#1275).
-    function test_AggregatedFPV_AfterBinding_SumOfValues() public {
+    /// Strategy 11: after binding aggregatedFilecoinPayVolume = Σ each orchestrator's bound USD value (pure view, FIPs#1275).
+    function test_AggregatedFilecoinPayVolume_AfterBinding_SumOfValues() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
         _admit(orchA);
@@ -222,11 +222,11 @@ contract SRAQuarterTest is SRATestBase {
         _postAs(orchB, 0, _fpv(250e18));
 
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 350e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 350e18);
     }
 
-    /// Strategy 11: a frozen orchestrator's (frozen at the E+POST instant) FPV is excluded from the aggregate.
-    function test_AggregatedFPV_FrozenExcluded() public {
+    /// Strategy 11: a frozen orchestrator's (frozen at the E+POST instant) FilecoinPayVolume is excluded from the aggregate.
+    function test_AggregatedFilecoinPayVolume_FrozenExcluded() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
         _admit(orchA);
@@ -241,11 +241,11 @@ contract SRAQuarterTest is SRATestBase {
 
         vm.roll(_qVerifyEnd(0) + 1);
         // B excluded: the aggregate contains only A
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
     }
 
-    /// Strategy 11/CV7: some orchestrators did not post -> aggregatedFPV skips them (usd==0 continue).
-    function test_AggregatedFPV_UnpostedOrch_Excluded() public {
+    /// Strategy 11/CV7: some orchestrators did not post -> aggregatedFilecoinPayVolume skips them (usd==0 continue).
+    function test_AggregatedFilecoinPayVolume_UnpostedOrch_Excluded() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB"); // B admitted but does not post
         _admit(orchA);
@@ -256,7 +256,7 @@ contract SRAQuarterTest is SRATestBase {
 
         vm.roll(_qVerifyEnd(0) + 1); // post-binding
         // B unposted (posted=false) -> skipped; only A aggregated
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
     }
 
     // ------------------------------------------------------------------------

@@ -5,7 +5,7 @@ pragma solidity ^0.8.36;
 // Overflow DoS regression tests — V3 (TDD Red phase, audit findings)
 //
 // Background: the SRA audit (PR #24, probe-verified) found 3 overflow-DoS
-// vulnerabilities sharing one root cause: the FPV input fields had no
+// vulnerabilities sharing one root cause: the FilecoinPayVolume input fields had no
 // business-domain upper-bound validation.
 //
 //   V1 — Anchor pollution → network-wide permanent DoS: obsolete after FIPs#1275
@@ -15,7 +15,7 @@ pragma solidity ^0.8.36;
 //        FIPs#1275 (no on-chain FIL→USD conversion; _finalizeConversion removed).
 //   V3 — Huge USD total → _computeShares overflow → quarterly settlement stuck:
 //        still applicable — the single USD total feeds usds[i] * SHARE_TOTAL in
-//        _computeShares; the fix is the MAX_FPV_USD business-domain bound enforced
+//        _computeShares; the fix is the MAX_FILECOIN_PAY_VOLUME_USD business-domain bound enforced
 //        at postVolume/correctVolume.
 //
 // Expected fix behavior (locked by these tests, TDD):
@@ -57,7 +57,7 @@ contract SRAOverflowDoS is SRATestBase {
     }
 
     /// V3 regression (reject-at-post): the huge total must be rejected by postVolume
-    /// (expected fix: business-domain upper bound MAX_FPV_USD on the single USD total).
+    /// (expected fix: business-domain upper bound MAX_FILECOIN_PAY_VOLUME_USD on the single USD total).
     function test_V3_HugeUsd_RejectedByPostVolume() public {
         address attacker = makeAddr("v3-reject");
         _admit(attacker);

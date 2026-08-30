@@ -87,11 +87,11 @@ contract SRAAdversarial is SRATestBase {
         sra.correctVolume(orch, type(uint64).max, FixedU18.wrap(_fpv(100e18)));
     }
 
-    /// aggregatedFPV on a future quarter (before its binding) -> NotBound(q).
-    function test_AggregatedFPV_FutureQuarter_NotBound() public {
+    /// aggregatedFilecoinPayVolume on a future quarter (before its binding) -> NotBound(q).
+    function test_AggregatedFilecoinPayVolume_FutureQuarter_NotBound() public {
         vm.roll(_qVerifyEnd(0) + 1); // Q0 binding complete
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.NotBound.selector, uint64(10)));
-        sra.aggregatedFPV(10);
+        sra.aggregatedFilecoinPayVolume(10);
     }
 
     /// q = uint64.max on qEnd -> _qEnd range guard fires (uint64 width) -> InvalidParameter.
@@ -127,11 +127,11 @@ contract SRAAdversarial is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // 2. FPV single-USD-total exact-limit boundaries (accept at limit / reject limit+1)
-    //    (FIP-0118 FIPs#1275: FPV is a single USD total; MAX_FPV_USD = 1e30 domain bound)
+    // 2. FilecoinPayVolume single-USD-total exact-limit boundaries (accept at limit / reject limit+1)
+    //    (FIP-0118 FIPs#1275: FilecoinPayVolume is a single USD total; MAX_FILECOIN_PAY_VOLUME_USD = 1e30 domain bound)
     // ------------------------------------------------------------------------
 
-    /// usd == MAX_FPV_USD(1e30) is accepted (domain boundary).
+    /// usd == MAX_FILECOIN_PAY_VOLUME_USD(1e30) is accepted (domain boundary).
     function test_Fpv_Usd_AtMax_Accepted() public {
         address orch = makeAddr("orch");
         _admit(orch);
@@ -141,7 +141,7 @@ contract SRAAdversarial is SRATestBase {
         assertEq(FixedU18.unwrap(sra.fpvOf(0, orch).usd), 1e30);
     }
 
-    /// usd == MAX_FPV_USD + 1 is rejected with InvalidParameter.
+    /// usd == MAX_FILECOIN_PAY_VOLUME_USD + 1 is rejected with InvalidParameter.
     function test_Fpv_Usd_OverMax_Rejected() public {
         address orch = makeAddr("orch");
         _admit(orch);

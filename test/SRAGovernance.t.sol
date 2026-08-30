@@ -17,7 +17,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
-import {FPV} from "../src/lib/SraTypes.sol";
+import {FilecoinPayVolume} from "../src/lib/SraTypes.sol";
 import {UnanimousGovernance} from "../src/lib/UnanimousGovernance.sol";
 import {IsASafe} from "../src/lib/IsASafe.sol";
 
@@ -154,13 +154,13 @@ contract SRAGovernanceTest is SRATestBase {
         vm.prank(owner1);
         sra.correctVolume(orch, 0, FixedU18.wrap(250e18));
         // after the first vote not effective (not full vote): the value is still the posted value
-        FPV memory f1 = sra.fpvOf(0, orch);
+        FilecoinPayVolume memory f1 = sra.fpvOf(0, orch);
         assertEq(FixedU18.unwrap(f1.usd), 100e18);
 
         vm.prank(owner2);
         sra.correctVolume(orch, 0, FixedU18.wrap(250e18)); // second vote executes immediately
 
-        FPV memory f2 = sra.fpvOf(0, orch);
+        FilecoinPayVolume memory f2 = sra.fpvOf(0, orch);
         assertEq(FixedU18.unwrap(f2.usd), 250e18);
     }
 

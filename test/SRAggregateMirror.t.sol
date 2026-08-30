@@ -3,7 +3,7 @@ pragma solidity ^0.8.36;
 
 // ============================================================================
 // Active-quarter aggregate mirror — differential tests
-//   aggregatedFPV reads the O(1) mirror (totalUsd) for the active quarter; these
+//   aggregatedFilecoinPayVolume reads the O(1) mirror (totalUsd) for the active quarter; these
 //   tests pin the mirror to the linear-scan semantics across post / correct /
 //   freeze / unfreeze / replace / remove, plus the historical-quarter fallback.
 //
@@ -29,7 +29,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         _postAs(b, 0, _fpv(200e18));
 
         vm.roll(_qVerifyEnd(0) + 1); // post-binding
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 300e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18);
     }
 
     /// Unposted orchestrator never enters the mirror.
@@ -43,7 +43,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         _postAs(a, 0, _fpv(100e18));
 
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
     }
 
     /// Freeze before E+POST excludes the contribution (mirror deducts).
@@ -59,7 +59,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         _freeze(a); // +100 -> still inside posting window
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 200e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
     }
 
     /// Unfreeze before E+POST re-includes the contribution (mirror adds back).
@@ -73,7 +73,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         _freeze(a); // deduct
         _unfreeze(a); // add back (still before E+POST)
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
     }
 
     /// Freeze after E+POST does not change the quarter (E+POST snapshot semantics).
@@ -87,7 +87,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         vm.roll(_qPostEnd(0) + 1); // verification window
         _freeze(a); // +100 -> after E+POST: quarter already fixed
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
     }
 
     /// CorrectVolume adjusts the mirror (up / down / clear-to-zero).
@@ -106,7 +106,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         _correctVolume(b, 0, 0); // clear
 
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 150e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 150e18);
     }
 
     /// Replacement during posting transfers identity — the old orchestrator's contribution is
@@ -130,7 +130,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         sra.replace(a, a2); // still inside posting window
 
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 300e18); // inherited — no deduction
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18); // inherited — no deduction
     }
 
     /// Removal drops the contribution (any time while the mirror is active).
@@ -146,7 +146,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         _remove(a);
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 200e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
     }
 
     /// Freeze (posting) then remove: the freeze already excluded the contribution, so the
@@ -166,7 +166,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         _remove(a); // must NOT deduct again
 
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 200e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
     }
 
     /// Freeze (posting) then replace: the same single-deduction guarantee on the replace path.
@@ -190,7 +190,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         sra.replace(a, a2); // must NOT deduct again
 
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 200e18);
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
     }
 
     /// Mirror switches quarters; the previous quarter falls back to the linear scan.
@@ -203,14 +203,14 @@ contract SRAggregateMirrorTest is SRATestBase {
         vm.roll(_qEnd(0) + 1);
         _postAs(a, 0, _fpv(100e18));
         vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18); // mirror for q=0
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18); // mirror for q=0
 
         // quarter 1: mirror re-points; q=0 becomes historical (linear fallback)
         vm.roll(_qEnd(1) + 1);
         _postAs(b, 1, _fpv(50e18));
         vm.roll(_qVerifyEnd(1) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18); // fallback scan
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(1)), 50e18); // mirror for q=1
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18); // fallback scan
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(1)), 50e18); // mirror for q=1
     }
 
     /// Lagging SubmitShares (spec: operates on the latest bound quarter, up to one quarter of lag):
@@ -278,8 +278,8 @@ contract SRAggregateMirrorTest is SRATestBase {
         _correctVolume(b, 1, _fpv(200e18));
 
         vm.roll(_qVerifyEnd(1) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18); // q=0 snapshot intact
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(1)), 200e18); // q=1 counter
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18); // q=0 snapshot intact
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(1)), 200e18); // q=1 counter
 
         sra.submitShares(1); // q=1 latest bound, active quarter: reads fpv (b only)
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
@@ -309,7 +309,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         _correctVolume(b, 1, _fpv(300e18));
 
         vm.roll(_qVerifyEnd(1) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(1)), 350e18); // 50 + 300, no leak from q0
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(1)), 350e18); // 50 + 300, no leak from q0
     }
 
     /// Spec §3.2/§4.4 timing guard: RemoveOrchestrator reverts while a bound quarter awaits its
@@ -422,11 +422,11 @@ contract SRAggregateMirrorTest is SRATestBase {
         shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1, "future bound quarter no-op leaves the map untouched");
         assertEq(shares[0].wallet, a, "map still the q1 distribution");
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(2)), 0, "q2 has no contributions");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(2)), 0, "q2 has no contributions");
     }
 
     /// An orchestrator removed before the close of the posting period is excluded —
-    /// its FPV does not enter AggregatedFPV(Q) (spec §2.2). With activeQ still in its posting
+    /// its FilecoinPayVolume does not enter AggregatedFilecoinPayVolume(Q) (spec §2.2). With activeQ still in its posting
     /// window the removal deducts the contribution from the aggregate (read once the quarter binds).
     function test_Mirror_Remove_InPostingWindow_DeductsAggregate() public {
         address a = makeAddr("a");
@@ -441,10 +441,10 @@ contract SRAggregateMirrorTest is SRATestBase {
         _remove(b); // still within E+POST (hold 100 < POST 300): contribution excluded
 
         vm.roll(_qVerifyEnd(0) + 1); // Q0 binds — aggregate readable
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18, "removed pre-E+POST FPV excluded");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18, "removed pre-E+POST FilecoinPayVolume excluded");
     }
 
-    /// Once the verification window closes, AggregatedFPV(activeQ) is a fixed binding
+    /// Once the verification window closes, AggregatedFilecoinPayVolume(activeQ) is a fixed binding
     /// snapshot (spec §2.2: the read view exposes the bound values directly). A removal after
     /// binding must not rewrite it — only a pre-E+POST removal excludes the contribution.
     function test_Mirror_Remove_AfterBinding_KeepsSnapshot() public {
@@ -461,17 +461,17 @@ contract SRAggregateMirrorTest is SRATestBase {
         sra.submitShares(0);
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 2, "both contributors in the bound map");
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 300e18, "bound aggregate");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18, "bound aggregate");
 
         _remove(b); // post-binding removal: aggregate is a binding snapshot, must not drift
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 300e18, "bound aggregate unchanged after removal");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18, "bound aggregate unchanged after removal");
         shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 2, "submitted map stands (removal does not rewrite a submitted map)");
     }
 
     /// A removal in the verification window (E+POST passed, not yet bound) must exclude
     /// the orchestrator from BOTH the share map (it leaves the admitted list, which submitShares
-    /// collects) and the aggregate — otherwise aggregatedFPV(0) = 300 != map sum 100.
+    /// collects) and the aggregate — otherwise aggregatedFilecoinPayVolume(0) = 300 != map sum 100.
     function test_Mirror_Remove_InVerificationWindow_Excludes() public {
         address a = makeAddr("a");
         address b = makeAddr("b");
@@ -491,7 +491,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1, "removed orchestrator absent from the map");
         assertEq(shares[0].wallet, a, "map = a only");
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(0)), 100e18, "removed FPV excluded -- consistent with map");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18, "removed FilecoinPayVolume excluded -- consistent with map");
     }
 
     /// A gap quarter (no writes, zero volume) submits as an all-zero no-op — the mirror
@@ -520,6 +520,6 @@ contract SRAggregateMirrorTest is SRATestBase {
         shares = rewardActor().getShares(SERVICE_STREAM_ID);
         assertEq(shares.length, 1, "gap quarter no-op leaves the map untouched");
         assertEq(shares[0].wallet, a, "map still the q0 distribution");
-        assertEq(FixedU18.unwrap(sra.aggregatedFPV(1)), 0, "gap quarter has no contributions");
+        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(1)), 0, "gap quarter has no contributions");
     }
 }
