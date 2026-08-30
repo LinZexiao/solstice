@@ -196,8 +196,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      ACTIVATION_EPOCH) saturate to quarter 0, matching the initial activeQ = 0.
     function _quarterOf(Epoch nowE) internal view returns (uint64) {
         if (nowE < ACTIVATION_EPOCH) return 0;
-        uint256 offset = uint256(Epoch.unwrap(nowE)) - uint256(Epoch.unwrap(ACTIVATION_EPOCH));
-        return uint64(offset / uint256(Epoch.unwrap(EPOCHS_PER_QUARTER)));
+        unchecked {
+            // Safe: subtraction is guarded by the early return above (nowE >= ACTIVATION_EPOCH);
+            // division cannot divide by zero because the constructor requires epochsPerQuarter > 0.
+            uint256 offset = uint256(Epoch.unwrap(nowE)) - uint256(Epoch.unwrap(ACTIVATION_EPOCH));
+            return uint64(offset / uint256(Epoch.unwrap(EPOCHS_PER_QUARTER)));
+        }
     }
 
     /// @dev Time-correct the mirror cache before a write: if the active quarter lags the time
