@@ -29,14 +29,10 @@ jobs:
         run: |
           forge install
 
-      - name: Build (AST for halmos)
-        # halmos reads the forge build-info (AST) from out/; the default forge
-        # build embeds it — the explicit pass makes the artifact deterministic
-        # for the symbolic run (extra_output metadata only, no via-ir build).
+      - name: Install halmos
         run: |
-          forge build --force --extra-output metadata
+          pip install halmos==0.1.13
 
       - name: Run symbolic verification
         run: |
-          pip install halmos==0.1.13
           halmos --contract QuarterWindowCheck --no-test-constructor
