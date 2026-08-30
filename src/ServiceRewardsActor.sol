@@ -53,6 +53,25 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     Epoch public immutable EPOCHS_PER_QUARTER;
     Epoch private immutable POST_PERIOD;
+    Epoch private immutable VERIFICATION_WINDOW;
+    Epoch private immutable SRA_CANCEL_HOLD;
+    Epoch private immutable ACTIVATION_EPOCH;
+
+    // ERC-7201 storage accessors — layout (structs, slots, assembly getters) lives in
+    // SraStorage.sol (separate storage declarations for the #5 proxy refactor);
+    // these thin wrappers keep the internal call sites unchanged.
+
+    function _registry() internal pure returns (SraStorage.SraStorageRegistry storage r) {
+        return SraStorage.registry();
+    }
+
+    function _quarter() internal pure returns (SraStorage.SraStorageQuarter storage q) {
+        return SraStorage.quarter();
+    }
+
+    function _params() internal pure returns (SraStorage.SraStorageParams storage p) {
+        return SraStorage.params();
+    }
 
     event OrchestratorAdmitted(address indexed orchestrator);
     event OrchestratorRemoved(address indexed orchestrator);
