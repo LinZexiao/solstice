@@ -355,6 +355,24 @@ contract SRAAdversarial is SRATestBase {
         );
     }
 
+    /// Constructor rejects when the uint64 window sum wraps: POST + VERIFY = 2^63 + 2^63 = 2^64, which
+    /// wraps to 0 in the uint64 domain — a uint64-only check would pass (0 < EPOCHS = 2^64 - 1) and
+    /// admit an overlapping window. The uint256 sum (2^64) against EPOCHS must reject.
+    function test_Ctor_WindowSum_Uint64Wrap_Rejected() public {
+        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
+        new ServiceRewardsActor(
+            owner1,
+            owner2,
+            Epoch.wrap(type(uint64).max), // EPOCHS: 2^64 - 1
+            Epoch.wrap(uint64(2 ** 63)), // POST
+            Epoch.wrap(uint64(2 ** 63)), // VERIFY: uint64 sum wraps to 0; uint256 sum = 2^64 > EPOCHS -> rejected
+            Epoch.wrap(SRA_CANCEL_HOLD),
+            Epoch.wrap(ACTIVATION_EPOCH),
+            MIN_LOT,
+            PRICE_BAND
+        );
+    }
+
     /// Constructor rejects the exact boundary: POST + VERIFY == EPOCHS leaves the window's last
     /// epoch inside the next quarter's mirror window — _inVerificationWindow allows the write
     /// while _assertMirrorWindow rejects it (off-by-one dead zone), so the constraint is strict.

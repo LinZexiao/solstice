@@ -87,7 +87,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     error TooManyPairs(); // registerPairs batch exceeds MAX_PAIRS
     error InvalidParameter();
 
-
     /// @param owner1,owner2 governance dual Safe (must be Safe proxies)
     /// @param epochsPerQuarter quarter length (epochs)
     /// @param postPeriod posting window (epochs)
@@ -112,9 +111,10 @@ contract ServiceRewardsActor is UnanimousGovernance {
         owner2.addOwner();
 
         require(
-            priceBand <= BASIS_POINTS && Epoch.unwrap(epochsPerQuarter) > 0 &&
-            Epoch.unwrap(postPeriod) > 0 && Epoch.unwrap(verificationWindow) > 0 &&
-            postPeriod + verificationWindow < epochsPerQuarter,
+            priceBand <= BASIS_POINTS && Epoch.unwrap(epochsPerQuarter) > 0 && Epoch.unwrap(postPeriod) > 0
+                && Epoch.unwrap(verificationWindow) > 0
+                && uint256(Epoch.unwrap(postPeriod)) + uint256(Epoch.unwrap(verificationWindow))
+                    < uint256(Epoch.unwrap(epochsPerQuarter)),
             InvalidParameter()
         );
 
