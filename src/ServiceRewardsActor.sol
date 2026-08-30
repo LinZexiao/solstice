@@ -332,6 +332,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @dev The id record is kept (wallet/fpv/prevFpv retained for audit); only the address mapping is
     ///      cleared, so a removed id is never reachable from an address and its pairs read as unclaimed.
     function remove(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
+        SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
@@ -346,9 +347,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // a later removal must not rewrite it. The boundary is binding (not E+POST — freeze's
         // boundary): unlike freeze, removal drops the orchestrator from the admitted list, so the
         // map and the aggregate must exclude it together for every pre-binding removal.
-        uint64 q = SraStorage.quarter().activeQuarter;
-        if (!_afterBinding(q) && !o.frozenAtPostEnd && o.fpv > ZERO) {
-            SraStorage.quarter().totalUsd[q] = SraStorage.quarter().totalUsd[q] - o.fpv;
+        if (!_afterBinding(qt.activeQuarter) && !o.frozenAtPostEnd && o.fpv > ZERO) {
+            qt.totalUsd[qt.activeQuarter] = qt.totalUsd[qt.activeQuarter] - o.fpv;
         }
         o.admitted = false;
         o.frozenSince = NEVER;
@@ -366,6 +366,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     /// @notice Freeze: suspends, zeroes shares, excludes FilecoinPayVolume (spec §4.2). Freeze does not release a slot.
     function freeze(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
+        SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
@@ -375,9 +376,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.frozenSince = nowE;
         // fpv-effectiveness: a freeze before the posting window closes excludes the active
         // quarter (E+POST snapshot); from the verification window onward the quarter is fixed.
-        uint64 q = SraStorage.quarter().activeQuarter;
+        uint64 q = qt.activeQuarter;
         if (nowE <= _qEnd(q) + POST_PERIOD && o.fpv > ZERO) {
-            SraStorage.quarter().totalUsd[q] = SraStorage.quarter().totalUsd[q] - o.fpv; // fpv retained as unfreeze restore source
+            qt.totalUsd[q] = qt.totalUsd[q] - o.fpv; // fpv retained as unfreeze restore source
             o.frozenAtPostEnd = true;
         }
         emit OrchestratorFrozen(orch);
@@ -385,6 +386,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     /// @notice Exact restoration (spec §4.2).
     function unfreeze(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
+        SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
@@ -394,9 +396,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.frozenSince = NEVER;
         // Symmetric with freeze: an unfreeze before the posting window closes re-includes the
         // active-quarter contribution (if posted); from the verification window onward it is fixed.
-        uint64 q = SraStorage.quarter().activeQuarter;
+        uint64 q = qt.activeQuarter;
         if (nowE <= _qEnd(q) + POST_PERIOD && o.fpv > ZERO) {
-            SraStorage.quarter().totalUsd[q] = SraStorage.quarter().totalUsd[q] + o.fpv;
+            qt.totalUsd[q] = qt.totalUsd[q] + o.fpv;
             o.frozenAtPostEnd = false;
         }
         emit OrchestratorUnfrozen(orch);
