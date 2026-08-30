@@ -22,7 +22,7 @@ pragma solidity ^0.8.36;
 //     empty-array semantics, and the multi-orchestrator aggregate bound.
 // ============================================================================
 
-import {Share} from "../src/lib/FVMRewardTypes.sol";
+import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
 import {Binding} from "../src/lib/SraTypes.sol";
@@ -327,7 +327,7 @@ contract SRAAdversarial is SRATestBase {
         vm.roll(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(_sumShares(shares), 1e18);
     }
 

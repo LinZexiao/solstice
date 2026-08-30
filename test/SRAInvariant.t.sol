@@ -29,7 +29,7 @@ pragma solidity ^0.8.36;
 
 import {Test} from "forge-std/Test.sol";
 
-import {Share} from "../src/lib/FVMRewardTypes.sol";
+import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Binding} from "../src/lib/SraTypes.sol";
@@ -404,7 +404,7 @@ contract SRAInvariantHandler is SRATestBase {
     }
 
     function getServiceShares() external view returns (Share[] memory) {
-        return rewardActor().getShares(SERVICE_STREAM_ID);
+        return rewardActor().getShares(SERVICE_ID);
     }
 
     function everSubmitted() external view returns (bool) {

@@ -6,12 +6,10 @@ import {Epoch} from "./lib/Epoch.sol";
 import {FixedU18} from "./lib/FixedU18.sol";
 import {GateParams, GateParamsLibrary} from "./lib/GateParams.sol";
 import {FVMRewards} from "./lib/FVMRewards.sol";
-import {PendingOp, Share, WeightRecord, WeightRecordUpdate} from "./lib/FVMRewardTypes.sol";
+import {PendingOp, SERVICE_ID, Share, WeightRecord, WeightRecordUpdate} from "./lib/FVMRewardTypes.sol";
 import {OwnersLibrary} from "./lib/Owners.sol";
 import {UnanimousGovernance} from "./lib/UnanimousGovernance.sol";
 import {IsASafe} from "./lib/IsASafe.sol";
-
-uint64 constant SERVICE_ID = 2;
 
 int256 constant STEP = 5e16; // 5%
 

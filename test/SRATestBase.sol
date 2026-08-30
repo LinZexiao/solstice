@@ -25,7 +25,7 @@ import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {Binding} from "../src/lib/SraTypes.sol";
-import {Share, WeightRecord} from "../src/lib/FVMRewardTypes.sol";
+import {SERVICE_ID, Share, WeightRecord} from "../src/lib/FVMRewardTypes.sol";
 import {FVMRewards} from "../src/lib/FVMRewards.sol";
 import {SWA_TIMELOCK} from "../src/lib/FVMRewardMethod.sol";
 
@@ -51,9 +51,6 @@ contract SRATestBase is MockRewardTest {
     uint64 internal constant ACTIVATION_EPOCH = 100_000;
     uint256 internal constant MIN_LOT = 100; // 100 USD (lot face value; authoritative for the off-chain indexer, FIPs#1275)
     uint256 internal constant PRICE_BAND = 2000; // 20% (basis points), test threshold
-
-    // f02's service stream fixed id = 2 (f02-design: "Migration pins consensus = 1 and service = 2")
-    uint64 internal constant SERVICE_STREAM_ID = 2;
 
     function setUp() public virtual override {
         super.setUp();
@@ -95,7 +92,7 @@ contract SRATestBase is MockRewardTest {
         Share[] memory initialShares = new Share[](1);
         initialShares[0] = Share({wallet: address(sra), share: FixedU18.wrap(1e18)});
         int256 exitCode = FVMRewards.tryRegisterStream(
-            SERVICE_STREAM_ID,
+            SERVICE_ID,
             WeightRecord({vStart: 0, slope: 0, tStart: Epoch.wrap(0), floor: 0, cap: WAD}),
             address(sra),
             initialShares,

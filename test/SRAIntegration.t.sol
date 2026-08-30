@@ -11,7 +11,7 @@ pragma solidity ^0.8.36;
 // ============================================================================
 
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
-import {Share} from "../src/lib/FVMRewardTypes.sol";
+import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 
@@ -53,7 +53,7 @@ contract SRAIntegrationTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 900e18, "post-submit aggregated matches final value");
 
         // shares proportional to USD: a:b = 600:300 = 2:1, Σ == 1e18 (largest-remainder tops up the larger remainder a)
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2);
         assertEq(_sumShares(shares), 1e18);
         assertEq(_walletShare(shares, a), 666_666_666_666_666_667);

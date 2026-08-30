@@ -13,7 +13,7 @@ pragma solidity ^0.8.36;
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
-import {Share} from "../src/lib/FVMRewardTypes.sol";
+import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 
 contract SRAggregateMirrorTest is SRATestBase {
@@ -232,7 +232,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         // q=0 is still the latest bound quarter (q=1 not bound yet): lagging submit reads prevFpv
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2, "both q0 contributors from the mirror");
         assertEq(shares[0].wallet, a, "posting order: a first (mirror of a's q0 value)");
         assertEq(_shareOf(shares, a) + _shareOf(shares, b), 1e18, "shares sum to 100%");
@@ -256,7 +256,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         _postAs(b, 1, _fpv(50e18)); // advance: a's prevFpv is fixed to 0 (excluded), b's to 200
 
         sra.submitShares(0); // lagging: q=0 latest bound, reads prevFpv
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1, "frozen-at-E+POST excluded from the mirror");
         assertEq(shares[0].wallet, b, "only b remains");
         assertEq(FixedU18.unwrap(shares[0].share), 1e18, "b gets 100%");
@@ -282,7 +282,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(1)), 200e18); // q=1 counter
 
         sra.submitShares(1); // q=1 latest bound, active quarter: reads fpv (b only)
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1, "backfill only contributor of q=1");
         assertEq(shares[0].wallet, b);
         assertEq(FixedU18.unwrap(shares[0].share), 1e18);
@@ -344,7 +344,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         // crank the pending quarter, then the *same* unanimous task's execution now lands
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2, "both q0 contributors submitted while still admitted");
         sra.remove(b); // execution call, hold already elapsed, guard cleared
         assertEq(sra.isAdmitted(b), false, "removed after the pending quarter is cleared");
@@ -411,7 +411,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         // submit q1 (latest bound, active quarter): map = [a], lastSubmittedQ = 2
         vm.roll(_qVerifyEnd(1) + 1);
         sra.submitShares(1);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1, "q1 map = a only");
         assertEq(shares[0].wallet, a);
 
@@ -419,7 +419,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         // must be an all-zero no-op — map unchanged, the quarter still counts as submitted.
         vm.roll(_qVerifyEnd(2) + 1);
         sra.submitShares(2);
-        shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1, "future bound quarter no-op leaves the map untouched");
         assertEq(shares[0].wallet, a, "map still the q1 distribution");
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(2)), 0, "q2 has no contributions");
@@ -459,13 +459,13 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         vm.roll(_qVerifyEnd(0) + 1); // Q0 binds
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2, "both contributors in the bound map");
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18, "bound aggregate");
 
         _remove(b); // post-binding removal: aggregate is a binding snapshot, must not drift
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18, "bound aggregate unchanged after removal");
-        shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2, "submitted map stands (removal does not rewrite a submitted map)");
     }
 
@@ -488,7 +488,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         vm.roll(_qVerifyEnd(0) + 1); // Q0 binds
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1, "removed orchestrator absent from the map");
         assertEq(shares[0].wallet, a, "map = a only");
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18, "removed FilecoinPayVolume excluded -- consistent with map");
@@ -506,7 +506,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         _postAs(a, 0, _fpv(100e18));
         vm.roll(_qVerifyEnd(0) + 1); // Q0 binds
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1, "q0 map = a");
         assertEq(shares[0].wallet, a);
 
@@ -517,7 +517,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         // Q1 binds with no contribution: submitShares(1) must be an all-zero no-op.
         vm.roll(_qVerifyEnd(1) + 1);
         sra.submitShares(1);
-        shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1, "gap quarter no-op leaves the map untouched");
         assertEq(shares[0].wallet, a, "map still the q0 distribution");
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(1)), 0, "gap quarter has no contributions");

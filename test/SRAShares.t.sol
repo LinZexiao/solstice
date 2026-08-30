@@ -9,7 +9,7 @@ pragma solidity ^0.8.36;
 // Mock validation: stream exists/EXPLICIT/writer permission/≤64 recipients/Σ==1e18 (see FVMRewardActor._setShares).
 // ============================================================================
 
-import {Share} from "../src/lib/FVMRewardTypes.sol";
+import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {FVMRewards} from "../src/lib/FVMRewards.sol";
 import {USR_FORBIDDEN} from "fvm-solidity/FVMErrors.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
@@ -36,7 +36,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 3);
         assertEq(_sumShares(shares), 1e18);
         // split fairness: each share ∈ {333333333333333333, 333333333333333334}
@@ -57,7 +57,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 7);
         assertEq(_sumShares(shares), 1e18);
         for (uint256 i = 0; i < shares.length; i++) {
@@ -75,7 +75,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 17);
         assertEq(_sumShares(shares), 1e18);
         for (uint256 i = 0; i < shares.length; i++) {
@@ -93,7 +93,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2);
         assertEq(_walletShare(shares, a), 300_000_000_000_000_000); // 0.3e18
         assertEq(_walletShare(shares, b), 700_000_000_000_000_000); // 0.7e18
@@ -115,7 +115,7 @@ contract SRASharesTest is SRATestBase {
         sra.submitShares(0);
 
         // no SetShares happened: the stream map is still the registration-time initial map (writer = SRA)
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1);
         assertEq(shares[0].wallet, address(sra)); // initial map unchanged
         assertEq(FixedU18.unwrap(shares[0].share), 1e18);
@@ -131,7 +131,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1);
         assertEq(shares[0].wallet, address(sra)); // initial map unchanged
         assertEq(FixedU18.unwrap(shares[0].share), 1e18);
@@ -150,7 +150,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1); // only a
         assertEq(shares[0].wallet, a);
         assertEq(FixedU18.unwrap(shares[0].share), 1e18);
@@ -183,7 +183,7 @@ contract SRASharesTest is SRATestBase {
         sra.submitShares(0);
 
         // b was frozen at the E+POST instant -> excluded (even though currently unfrozen)
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1);
         assertEq(shares[0].wallet, a);
         assertEq(FixedU18.unwrap(shares[0].share), 1e18);
@@ -207,7 +207,7 @@ contract SRASharesTest is SRATestBase {
         sra.submitShares(0);
 
         // b still counted in the quarter: both orchestrators get 50% each
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2);
         assertEq(_walletShare(shares, a), 500_000_000_000_000_000);
         assertEq(_walletShare(shares, b), 500_000_000_000_000_000);
@@ -227,7 +227,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 3);
         assertEq(_walletShare(shares, a) + _walletShare(shares, b) + _walletShare(shares, c), 1e18);
         // recipients are the orch addresses (design §2.5.3: wallet = orch address, S7 approved)
@@ -251,7 +251,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2);
         // a: 1000e18; b: 500e18; total 1500e18 -> a 2/3, b 1/3
         assertEq(_walletShare(shares, a), 666_666_666_666_666_667);
@@ -306,7 +306,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 64); // mock MAX_RECIPIENTS boundary: exactly 64 accepted
         assertEq(_sumShares(shares), 1e18);
         for (uint256 i = 0; i < shares.length; i++) {
@@ -331,7 +331,7 @@ contract SRASharesTest is SRATestBase {
 
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
-        Share[] memory q0 = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory q0 = rewardActor().getShares(SERVICE_ID);
         assertEq(q0.length, 2);
         // largest-remainder (remainder descending): A remainder = (1e38 % 3e20) = 1e20 < B remainder = (2e38 % 3e20) = 2e20
         // -> the larger-remainder B tops up +1: A=1/3, B=2/3+1wei
@@ -347,7 +347,7 @@ contract SRASharesTest is SRATestBase {
 
         _rollTo(_qVerifyEnd(1) + 1);
         sra.submitShares(1);
-        Share[] memory q1 = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory q1 = rewardActor().getShares(SERVICE_ID);
         // quarter 1's share map is independent: A/B did not post in quarter 1 (usdValue=0 filtered) -> no residue
         assertEq(q1.length, 1);
         assertEq(q1[0].wallet, c);
@@ -366,7 +366,7 @@ contract SRASharesTest is SRATestBase {
         address a = _admitAndPost(100e18);
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
-        Share[] memory q0 = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory q0 = rewardActor().getShares(SERVICE_ID);
         assertEq(q0.length, 1);
         assertEq(q0[0].wallet, a);
 
@@ -383,7 +383,7 @@ contract SRASharesTest is SRATestBase {
 
         // submitting the latest bound quarter (Q1) still succeeds
         sra.submitShares(1);
-        Share[] memory q1 = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory q1 = rewardActor().getShares(SERVICE_ID);
         assertEq(q1.length, 1);
         assertEq(q1[0].wallet, b);
         assertEq(FixedU18.unwrap(q1[0].share), 1e18);
@@ -409,7 +409,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertGt(shares.length, 0);
         assertEq(_sumShares(shares), 1e18); // largest-remainder: floor + remainder-descending top-up, Σ always exact
         for (uint256 i = 0; i < shares.length; i++) {
@@ -453,7 +453,7 @@ contract SRASharesTest is SRATestBase {
         // Control: with the injection off, the normal path succeeds; shares written identically to the no-injection case
         rewardActor().mockFailSetShares(false);
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1);
         assertEq(shares[0].wallet, orch);
         assertEq(FixedU18.unwrap(shares[0].share), 1e18);
@@ -495,7 +495,7 @@ contract SRASharesTest is SRATestBase {
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         // S5: the frozen-at-POST new must not appear in the share map (regardless of any resolve chain)
         assertEq(_walletShare(shares, newOrch), 0, "frozen successor must not receive shares");
         // old is not frozen and posted -> gets its entire share (the only non-excluded poster)
@@ -528,7 +528,7 @@ contract SRASharesTest is SRATestBase {
         // submit q0 after binding: the old address's posted FilecoinPayVolume is still aggregated under the same identity
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1);
         assertEq(_walletShare(shares, newOrch), 1e18, "historical FilecoinPayVolume follows the identity to the new wallet");
         assertEq(_sumShares(shares), 1e18);
@@ -558,7 +558,7 @@ contract SRASharesTest is SRATestBase {
 
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(_walletShare(shares, newOrch), 5e17, "share map wallet = the current (replaced-to) wallet");
         assertEq(_walletShare(shares, oldOrch), 0, "the replaced address receives nothing");
         assertEq(_sumShares(shares), 1e18);
@@ -586,7 +586,7 @@ contract SRASharesTest is SRATestBase {
 
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1);
         assertEq(_walletShare(shares, newOrch), 1e18);
         // the corrected value (200), not the original post (100), is aggregated

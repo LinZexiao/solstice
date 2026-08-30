@@ -21,7 +21,7 @@ pragma solidity ^0.8.36;
 import {Epoch, currentEpoch} from "./lib/Epoch.sol";
 import {FixedU18, ONE, ZERO} from "./lib/FixedU18.sol";
 import {FVMRewards} from "./lib/FVMRewards.sol";
-import {Share} from "./lib/FVMRewardTypes.sol";
+import {SERVICE_ID, Share} from "./lib/FVMRewardTypes.sol";
 import {OwnersLibrary} from "./lib/Owners.sol";
 import {UnanimousGovernance} from "./lib/UnanimousGovernance.sol";
 import {IsASafe} from "./lib/IsASafe.sol";
@@ -34,8 +34,6 @@ import {SraStorage} from "./lib/SraStorage.sol";
 contract ServiceRewardsActor is UnanimousGovernance {
     using IsASafe for address;
     using OwnersLibrary for address;
-
-    uint64 private constant SERVICE_STREAM_ID = 2;
 
     /// @dev Total share (f02 encoding constraint: Σ shares must be exactly == 1e18).
     FixedU18 private constant SHARE_TOTAL = ONE;
@@ -580,7 +578,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         }
 
         qt.nextQuarter = q + 1; // CEI: mark before the external call
-        FVMRewards.setShares(SERVICE_STREAM_ID, shares);
+        FVMRewards.setShares(SERVICE_ID, shares);
         emit SharesSubmitted(q, shares.length, total); // totalUsd as FixedU18 (18-decimal USD)
     }
 

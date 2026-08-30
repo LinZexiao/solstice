@@ -23,7 +23,7 @@ pragma solidity ^0.8.36;
 //         total must let submitShares settle (system stays operational).
 // ============================================================================
 
-import {Share} from "../src/lib/FVMRewardTypes.sol";
+import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 
@@ -52,7 +52,7 @@ contract SRAOverflowDoS is SRATestBase {
         vm.roll(_qVerifyEnd(0) + 1);
         sra.submitShares(0); // must not overflow
 
-        Share[] memory shares = rewardActor().getShares(SERVICE_STREAM_ID);
+        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(_sumShares(shares), 1e18);
     }
 
