@@ -32,6 +32,18 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(f.usd), 100e18);
     }
 
+    /// issue #34: VolumePosted carries the posted amount so off-chain indexers consume
+    /// the event directly instead of re-reading fpvOf after every post.
+    function test_PostVolume_EmitsVolumeAmount() public {
+        address orch = makeAddr("orch");
+        _admit(orch);
+
+        vm.roll(_qEnd(0) + 1); // E+1
+        vm.expectEmit(true, true, true, true, address(sra));
+        emit ServiceRewardsActor.VolumePosted(0, orch, FixedU18.wrap(_fpv(100e18)));
+        _postAs(orch, 0, _fpv(100e18));
+    }
+
     /// E itself is not in the posting window (E < now, strictly less).
     function test_PostVolume_AtQuarterEnd_Reverts() public {
         address orch = makeAddr("orch");
