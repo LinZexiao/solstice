@@ -12,7 +12,7 @@ pragma solidity ^0.8.36;
 //
 // The SRA never receives or holds value.
 //
-// Storage: 3 ERC-7201 namespaces (Registry/Quarter/Params),
+// Storage: 2 ERC-7201 namespaces (Registry/Quarter),
 //       reusing Solstice.Owners (dual Safe) and Solstice.PendingTasks (governance queue).
 //       The allowlists are event-only (AdmittedListsUpdated is the authoritative snapshot).
 
@@ -34,7 +34,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @dev Total share (f02 encoding constraint: Σ shares must be exactly == 1e18).
     FixedU18 private constant SHARE_TOTAL = ONE;
 
-    /// @dev PRICE_BAND in basis points (10000 = 100%).
     uint256 private constant BASIS_POINTS = 10_000;
 
     /// @dev D2: admitted orchestrator cap, matching f02 MAX_RECIPIENTS.
@@ -61,7 +60,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     event BindingCanceled(address indexed payer, address indexed operator, address indexed orchestrator);
     event OwnersReplaced(address indexed prevOwner, address indexed newOwner);
     event AdmittedListsUpdated(address[] stablecoins, address[] filecoinPayContracts);
-    event PricingParamsUpdated(uint256 minLot, uint256 priceBand);
+    event PricingParamsUpdated(uint256 minLotFloor, uint256 minLotAlphaNum, uint256 minLotAlphaDen, uint256 priceBand);
     event VolumePosted(uint64 indexed q, address indexed orchestrator, FixedU18 volume);
     event VolumeCorrected(uint64 indexed q, address indexed orchestrator);
     event SharesSubmitted(uint64 indexed q, uint256 recipientCount, FixedU18 totalUsd);
@@ -86,23 +85,19 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @param postPeriod posting window (epochs)
     /// @param verificationWindow verification window (epochs)
     /// @param activationEpoch end epoch of quarter 0 (window start)
-    /// @param minLot,priceBand initial FIL pricing parameters (governable; authoritative for the off-chain indexer, FIPs#1275)
     constructor(
         address owner1,
         address owner2,
         Epoch epochsPerQuarter,
         Epoch postPeriod,
         Epoch verificationWindow,
-        Epoch activationEpoch,
-        uint256 minLot,
-        uint256 priceBand
+        Epoch activationEpoch
     ) {
         owner1.addOwner();
         owner2.addOwner();
 
         require(
-            priceBand <= BASIS_POINTS && Epoch.unwrap(epochsPerQuarter) > 0 && Epoch.unwrap(postPeriod) > 0
-                && Epoch.unwrap(verificationWindow) > 0
+            Epoch.unwrap(epochsPerQuarter) > 0 && Epoch.unwrap(postPeriod) > 0 && Epoch.unwrap(verificationWindow) > 0
                 && uint256(Epoch.unwrap(postPeriod)) + uint256(Epoch.unwrap(verificationWindow))
                     < uint256(Epoch.unwrap(epochsPerQuarter)),
             InvalidParameter()
@@ -112,10 +107,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         POST_PERIOD = postPeriod;
         VERIFICATION_WINDOW = verificationWindow;
         ACTIVATION_EPOCH = activationEpoch;
-
-        SraStorage.SraStorageParams storage p = SraStorage.params();
-        p.minLot = minLot;
-        p.priceBand = priceBand;
 
         // id allocator starts at 1: 0 is the unregistered sentinel (activeIdOf[addr] == 0)
         SraStorage.registry().nextId = 1;
@@ -407,17 +398,15 @@ contract ServiceRewardsActor is UnanimousGovernance {
         emit AdmittedListsUpdated(stablecoins, filecoinPayContracts);
     }
 
-    /// @notice Updates the FIL pricing parameters MIN_LOT/PRICE_BAND.
-    ///         FIPs#1275: authoritative for the off-chain indexer's conversion, not an on-chain computation.
-    function setPricingParams(uint256 minLot, uint256 priceBand)
+    /// @notice Updates the FIL pricing parameters MIN_LOT_FLOOR / MIN_LOT_ALPHA (rational, num/den)
+    ///         / PRICE_BAND. Stores nothing: the call's only effect is the parameter event; the new
+    ///         values apply from the next quarter boundary (off-chain indexer semantics, FIPs#1275).
+    function setPricingParams(uint256 minLotFloor, uint256 minLotAlphaNum, uint256 minLotAlphaDen, uint256 priceBand)
         external
-        unanimous(keccak256(msg.data), SRA_CANCEL_HOLD)
+        unanimousNoHold(keccak256(msg.data))
     {
-        require(priceBand <= BASIS_POINTS, InvalidParameter());
-        SraStorage.SraStorageParams storage p = SraStorage.params();
-        p.minLot = minLot;
-        p.priceBand = priceBand;
-        emit PricingParamsUpdated(minLot, priceBand);
+        require(minLotAlphaDen != 0 && priceBand <= BASIS_POINTS, InvalidParameter());
+        emit PricingParamsUpdated(minLotFloor, minLotAlphaNum, minLotAlphaDen, priceBand);
     }
 
     /// @notice Either Safe calls _veto alone to discard a queued change (spec §4.2, _veto).
@@ -593,11 +582,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         if (q == activeQ) return FilecoinPayVolume({usd: o.fpv});
         if (activeQ > 0 && q == activeQ - 1) return FilecoinPayVolume({usd: o.prevFpv});
         return FilecoinPayVolume({usd: ZERO});
-    }
-
-    function getPricingParams() external view returns (uint256 minLot, uint256 priceBand) {
-        SraStorage.SraStorageParams storage p = SraStorage.params();
-        return (p.minLot, p.priceBand);
     }
 
     function orchestratorCount() external view returns (uint64) {
