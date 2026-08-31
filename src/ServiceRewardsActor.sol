@@ -54,12 +54,15 @@ contract ServiceRewardsActor is UnanimousGovernance {
     Epoch private immutable SRA_CANCEL_HOLD;
     Epoch private immutable ACTIVATION_EPOCH;
 
-    event OrchestratorAdmitted(address indexed orchestrator);
-    event OrchestratorRemoved(address indexed orchestrator);
-    event OrchestratorReplaced(address indexed oldOrchestrator, address indexed newOrchestrator);
+    event OrchestratorAdmitted(address indexed orch, address wallet);
+    event OrchestratorRemoved(address indexed orch, string reason);
+    event OrchestratorWalletReplaced(address indexed oldOrch, address indexed newOrch, bytes extradata);
     event BindingDeclared(address indexed payer, address indexed operator, address indexed orchestrator);
-    event BindingReassigned(address indexed payer, address indexed operator, address indexed orchestrator);
+    event BindingReassigned(
+        address indexed payer, address indexed operator, address indexed orchestrator, bool inherit
+    );
     event BindingCanceled(address indexed payer, address indexed operator, address indexed orchestrator);
+    event OwnersReplaced(address indexed prevOwner, address indexed newOwner);
     event AdmittedListsUpdated(address[] stablecoins, address[] filecoinPayContracts);
     event PricingParamsUpdated(uint256 minLot, uint256 priceBand);
     event VolumePosted(uint64 indexed q, address indexed orchestrator, FixedU18 volume);
@@ -283,26 +286,26 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     // ------------------------------------------------------------------------
-    // Governance operations (dual Safe + SRA_CANCEL_HOLD, unanimous path)
+    // Governance operations (dual Safe, unanimous path; no-hold on signature-finalized methods)
     // ------------------------------------------------------------------------
 
-    /// @notice Admits an orchestrator; rejects when admitted total >= 64 (D2).
+    /// @notice Admits an orchestrator with its payout wallet; rejects when admitted total >= 64 (D2).
     /// @dev Re-admit of a previously removed/replaced address allocates a fresh id — a fresh identity with no
     ///      bindings, FilecoinPayVolume, or history. Because ids are never reused and the address mapping (activeIdOf)
     ///      is cleared on remove/replace, there is no residual alias-chain or state to clean up.
-    function admit(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
+    function addOrchestrator(address orch, address wallet) external unanimousNoHold(keccak256(msg.data)) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         require(r.activeIdOf[orch] == 0, AlreadyAdmitted(orch));
         require(r.admittedIds.length < MAX_ORCHESTRATORS, AtCapacity());
         uint64 id = r.nextId;
         r.nextId = id + 1;
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
-        o.wallet = orch;
+        o.wallet = wallet;
         o.admitted = true;
         o.admittedIndex = uint64(r.admittedIds.length);
         r.activeIdOf[orch] = id;
         r.admittedIds.push(id);
-        emit OrchestratorAdmitted(orch);
+        emit OrchestratorAdmitted(orch, wallet);
     }
 
     /// @notice Permanent removal; releases all bindings (pairs return to unclaimed) (spec §4.2).
@@ -341,7 +344,13 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @dev O(1) wallet re-point: the id (identity) stays put, only the address mapping and the wallet field
     ///      change. bindings/fpv state both key on the id, so they follow the identity automatically —
     ///      no enumeration, no alias chain, and historical quarter FilecoinPayVolume remains aggregated.
-    function replace(address oldOrch, address newOrch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
+    /// @dev extradata carries the Orchestrator's co-signature (old-wallet rotation or new-wallet liveness proof,
+    ///      spec §4.2) and is not parsed here: Filecoin signatures cannot be verified in Solidity, so the payload
+    ///      is recorded verbatim for off-chain verification and correction disputes.
+    function replaceWallet(address oldOrch, address newOrch, bytes calldata extradata)
+        external
+        unanimousNoHold(keccak256(msg.data))
+    {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[oldOrch];
         require(id != 0 && r.orchestrators[id].admitted, NotAdmitted(oldOrch));
@@ -351,17 +360,20 @@ contract ServiceRewardsActor is UnanimousGovernance {
         r.activeIdOf[newOrch] = id;
         r.orchestrators[id].wallet = newOrch;
         // admittedIds unchanged (stores ids); bindings/fpv state all follow the id.
-        emit OrchestratorReplaced(oldOrch, newOrch);
+        emit OrchestratorWalletReplaced(oldOrch, newOrch, extradata);
     }
 
     /// @notice Disputed pair reassignment; volume is credited to the new orchestrator from the change epoch onward (spec §4.2).
-    function reassignBinding(address payer, address operator, address orch)
+    /// @dev inherit is carried in the event so every off-chain verifier applies the same application scope
+    ///      (inherit = false for a client-orchestrator change, inherit = true for a wrongful-claim adjudication);
+    ///      the contract records the binding, not the scope — the application epoch is off-chain semantics.
+    function reassignBinding(address payer, address operator, address orch, bool inherit)
         external
-        unanimous(keccak256(msg.data), SRA_CANCEL_HOLD)
+        unanimousNoHold(keccak256(msg.data))
     {
         uint64 id = _requireAdmittedId(orch);
         SraStorage.registry().bindings[_pairId(payer, operator)] = id;
-        emit BindingReassigned(payer, operator, orch);
+        emit BindingReassigned(payer, operator, orch, inherit);
     }
 
     /// @notice Governance release of a single binding: the pair returns to unclaimed and becomes claimable again.
@@ -388,6 +400,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         newOwner.isProbablyASafe();
         prevOwner.removeOwner();
         newOwner.addOwner();
+        emit OwnersReplaced(prevOwner, newOwner);
     }
 
     /// @notice Updates the stablecoin + Filecoin Pay allowlists (exclusive update, spec §4.2).
