@@ -3,8 +3,7 @@ pragma solidity ^0.8.36;
 
 // SRA governance flow tests
 //
-//   - two votes + permissionless execution after SRA_CANCEL_HOLD elapses
-//   - not executable within the hold (HoldUntil revert)
+//   - two votes, immediate execution (unanimousNoHold — no permissionless path)
 //   - single vote does not execute; non-owner rejected
 //   - veto (cancelPending) discards a queued change
 //   - NO_HOLD (correctVolume) full-vote immediate execution
@@ -21,42 +20,24 @@ import {IsASafe} from "../src/lib/IsASafe.sol";
 
 contract SRAGovernanceTest is SRATestBase {
     // ------------------------------------------------------------------------
-    // Two votes + hold flow
+    // Two votes, immediate execution (unanimousNoHold)
     // ------------------------------------------------------------------------
 
-    /// after two votes + hold elapses, any keeper can trigger execution (admit takes effect).
-    function test_Admit_TwoApprovalsPlusHold_Executes() public {
+    /// after two votes, the second approval executes immediately (admit takes effect; no hold, no permissionless path).
+    function test_Admit_TwoApprovals_ExecutesImmediately() public {
         address orch = makeAddr("orch");
         assertFalse(sra.isAdmitted(orch));
 
         vm.prank(owner1);
-        sra.admit(orch);
-        vm.prank(owner2);
-        sra.admit(orch);
-        // after the second approval the hold has not elapsed; admit not yet effective
+        sra.addOrchestrator(orch, orch);
+        // after the first vote the task is pending; admit not yet effective
         assertFalse(sra.isAdmitted(orch));
 
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.admit(orch); // permissionless completion
+        vm.prank(owner2);
+        sra.addOrchestrator(orch, orch); // second vote executes immediately
 
         assertTrue(sra.isAdmitted(orch));
         assertEq(sra.admittedCount(), 1);
-    }
-
-    /// a third call (execution attempt) within the hold reverts HoldUntil.
-    function test_Admit_HoldNotElapsed_ExecutionReverts() public {
-        address orch = makeAddr("orch");
-
-        vm.prank(owner1);
-        sra.admit(orch);
-        vm.prank(owner2);
-        sra.admit(orch);
-
-        // hold not elapsed: the third call must revert (HoldUntil, until = second approval + hold)
-        vm.roll(block.number + SRA_CANCEL_HOLD - 1);
-        vm.expectRevert();
-        sra.admit(orch);
-        assertFalse(sra.isAdmitted(orch));
     }
 
     /// a single vote (only owner1) does not execute.
@@ -64,15 +45,14 @@ contract SRAGovernanceTest is SRATestBase {
         address orch = makeAddr("orch");
 
         vm.prank(owner1);
-        sra.admit(orch);
+        sra.addOrchestrator(orch, orch);
 
         assertFalse(sra.isAdmitted(orch));
-        vm.roll(block.number + SRA_CANCEL_HOLD + 1);
-        // third call: approvals not full, owner1 already approved -> AlreadyApproved (owner1 cannot vote again)
+        // approvals not full, owner1 already approved -> AlreadyApproved (owner1 cannot vote again)
         // here we call again as owner1 to verify "the same task cannot be approved twice"
         vm.prank(owner1);
         vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.AlreadyApproved.selector));
-        sra.admit(orch);
+        sra.addOrchestrator(orch, orch);
     }
 
     /// a non-owner calling a governance method reverts NotOwner.
@@ -80,23 +60,20 @@ contract SRAGovernanceTest is SRATestBase {
         address stranger = makeAddr("stranger");
         vm.prank(stranger);
         vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.NotOwner.selector, stranger));
-        sra.admit(makeAddr("orch"));
+        sra.addOrchestrator(makeAddr("orch"), makeAddr("orch"));
     }
 
     /// after both Safes call the same governance method, the taskId record is identical (keccak256(msg.data)).
     function test_Admit_TaskIdIsKeccakOfCalldata() public {
         address orch = makeAddr("orch");
-        bytes32 expectedTaskId = keccak256(abi.encodeWithSignature("admit(address)", orch));
+        bytes32 expectedTaskId = keccak256(abi.encodeWithSignature("addOrchestrator(address,address)", orch, orch));
 
-        // after owner1 approves: task exists (single vote); after owner2 approves the same calldata: full vote and queued
+        // after owner1 approves: task exists (single vote); after owner2 approves the same calldata: full vote executes immediately
         vm.prank(owner1);
-        sra.admit(orch);
+        sra.addOrchestrator(orch, orch);
         vm.prank(owner2);
-        sra.admit(orch);
+        sra.addOrchestrator(orch, orch);
 
-        // if the taskIds match, the same calldata call after the hold can complete execution
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.admit(orch);
         assertTrue(sra.isAdmitted(orch));
         // expectedTaskId itself is not directly queryable (internal state); "execution completes" is the indirect proof
         assertTrue(expectedTaskId != bytes32(0));
@@ -107,24 +84,21 @@ contract SRAGovernanceTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// either Safe can veto to discard a queued change; after the veto the flow restarts.
+    /// (unanimousNoHold: the second vote executes, so the veto window is between the two votes.)
     function test_Veto_CancelsPendingAdmit() public {
         address orch = makeAddr("orch");
 
         vm.prank(owner1);
-        sra.admit(orch);
-        vm.prank(owner2);
-        sra.admit(orch);
+        sra.addOrchestrator(orch, orch); // vote 1: task pending
 
         // owner1 changes their mind: cancelPending discards the task
-        bytes32 taskId = keccak256(abi.encodeWithSignature("admit(address)", orch));
+        bytes32 taskId = keccak256(abi.encodeWithSignature("addOrchestrator(address,address)", orch, orch));
         vm.prank(owner1);
         sra.cancelPending(taskId);
 
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        // the original task was deleted: the third call is a fresh submission (first vote), not an execution
-        // resubmission must be initiated by an owner (the governance library's approve branch requires isOwner)
+        // the original task was deleted: owner1's resubmission is a fresh task (first vote), not an execution
         vm.prank(owner1);
-        sra.admit(orch);
+        sra.addOrchestrator(orch, orch);
         assertFalse(sra.isAdmitted(orch));
     }
 
@@ -143,7 +117,7 @@ contract SRAGovernanceTest is SRATestBase {
     /// the unanimousNoHold path — the second vote executes immediately (correctVolume takes effect within the verification window).
     function test_CorrectVolume_NoHold_SecondApprovalExecutesImmediately() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1); // posting period
         _postAs(orch, 0, _fpv(100e18));
@@ -165,7 +139,7 @@ contract SRAGovernanceTest is SRATestBase {
     /// before correctVolume's second vote (not a full vote), a repeat vote reverts AlreadyApproved.
     function test_CorrectVolume_SameOwnerTwice_Reverts() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
         vm.roll(_qPostEnd(0) + 1);
@@ -236,17 +210,19 @@ contract SRAGovernanceTest is SRATestBase {
 
         vm.prank(owner1);
         sra.replaceOwner(owner1, newOwner); // first vote only: not a full vote, ownership unchanged
+        vm.expectEmit(true, true, false, false, address(sra));
+        emit ServiceRewardsActor.OwnersReplaced(owner1, newOwner);
         vm.prank(owner2);
         sra.replaceOwner(owner1, newOwner); // second vote executes immediately (unanimousNoHold)
 
         // old owner revoked: owner1 can no longer vote on a fresh governance task
         vm.prank(owner1);
         vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.NotOwner.selector, owner1));
-        sra.admit(makeAddr("orch-after-rotation"));
+        sra.addOrchestrator(makeAddr("orch-after-rotation"), makeAddr("orch-after-rotation"));
 
         // new owner active: newOwner's first vote on a fresh task succeeds
         vm.prank(newOwner);
-        sra.admit(makeAddr("orch-new-owner-vote")); // no revert => newOwner is an owner
+        sra.addOrchestrator(makeAddr("orch-new-owner-vote"), makeAddr("orch-new-owner-vote")); // no revert => newOwner is an owner
     }
 
     /// E1: a non-Safe newOwner is rejected — NotSafeProxy at body execution (second approval).
@@ -261,7 +237,7 @@ contract SRAGovernanceTest is SRATestBase {
 
         // ownership unchanged after the failed rotation
         vm.prank(owner1);
-        sra.admit(makeAddr("orch-still-owner1")); // owner1 still an owner: no revert
+        sra.addOrchestrator(makeAddr("orch-still-owner1"), makeAddr("orch-still-owner1")); // owner1 still an owner: no revert
     }
 
     /// E1: a non-owner calling replaceOwner is rejected on the first vote (NotOwner).

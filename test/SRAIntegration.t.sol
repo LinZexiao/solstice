@@ -82,7 +82,7 @@ contract SRAIntegrationTest is SRATestBase {
     /// @dev Admits and posts an orchestrator with a single USD total (within q=0's posting window).
     function _admitAndPost(uint256 usd) internal returns (address orch) {
         orch = makeAddr(string.concat("orch-", vm.toString(_salt++)));
-        _admit(orch);
+        _admit(orch, orch);
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(usd));
     }
