@@ -62,7 +62,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     event OwnersReplaced(address indexed prevOwner, address indexed newOwner);
     event AdmittedListsUpdated(address[] stablecoins, address[] filecoinPayContracts);
     event PricingParamsUpdated(uint256 minLot, uint256 priceBand);
-    event VolumePosted(uint64 indexed q, address indexed orchestrator);
+    event VolumePosted(uint64 indexed q, address indexed orchestrator, FixedU18 volume);
     event VolumeCorrected(uint64 indexed q, address indexed orchestrator);
     event SharesSubmitted(uint64 indexed q, uint256 recipientCount, FixedU18 totalUsd);
 
@@ -274,7 +274,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         o.fpv = fpv;
         qt.totalUsd[q] = qt.totalUsd[q] + fpv;
 
-        emit VolumePosted(q, msg.sender);
+        emit VolumePosted(q, msg.sender, fpv);
     }
 
     // ------------------------------------------------------------------------
