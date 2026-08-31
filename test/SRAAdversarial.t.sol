@@ -36,7 +36,7 @@ contract SRAAdversarial is SRATestBase {
     /// q = a future quarter: posting window not yet open -> NotInPostingWindow(q).
     function test_PostVolume_FutureQuarter_NotInPostingWindow() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1); // inside Q0's posting window
         vm.prank(orch);
@@ -50,7 +50,7 @@ contract SRAAdversarial is SRATestBase {
     /// direct guard test).
     function test_PostVolume_MaxQuarter_RangeGuard_InvalidParameter() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         vm.prank(orch);
@@ -62,7 +62,7 @@ contract SRAAdversarial is SRATestBase {
     /// (unanimousNoHold: the second approval executes the body and reverts).
     function test_CorrectVolume_FutureQuarter_NotInVerificationWindow() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qVerifyEnd(0)); // inside Q0's verification window
         vm.prank(owner1);
@@ -75,7 +75,7 @@ contract SRAAdversarial is SRATestBase {
     /// q = uint64.max on correctVolume -> _qEnd range guard fires (uint64 width) -> InvalidParameter.
     function test_CorrectVolume_MaxQuarter_RangeGuard_InvalidParameter() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qVerifyEnd(0));
         vm.prank(owner1);
@@ -132,7 +132,7 @@ contract SRAAdversarial is SRATestBase {
     /// usd == MAX_FILECOIN_PAY_VOLUME_USD(1e30) is accepted (domain boundary).
     function test_Fpv_Usd_AtMax_Accepted() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(1e30));
@@ -142,7 +142,7 @@ contract SRAAdversarial is SRATestBase {
     /// usd == MAX_FILECOIN_PAY_VOLUME_USD + 1 is rejected with InvalidParameter.
     function test_Fpv_Usd_OverMax_Rejected() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         vm.prank(orch);
@@ -158,11 +158,9 @@ contract SRAAdversarial is SRATestBase {
     /// it becomes an admitted orchestrator that can never post (no caller can be 0).
     function test_Admit_ZeroAddress_Accepted() public {
         vm.prank(owner1);
-        sra.admit(address(0));
+        sra.addOrchestrator(address(0), address(0)); // vote 1 (approve)
         vm.prank(owner2);
-        sra.admit(address(0));
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.admit(address(0));
+        sra.addOrchestrator(address(0), address(0)); // vote 2 executes (unanimousNoHold)
         assertTrue(sra.isAdmitted(address(0)));
     }
 
@@ -171,7 +169,7 @@ contract SRAAdversarial is SRATestBase {
     function test_RegisterPairs_ZeroPayer_Accepted() public {
         address orch = makeAddr("orch");
         address operator = makeAddr("op");
-        _admit(orch);
+        _admit(orch, orch);
 
         Binding[] memory pairs = new Binding[](1);
         pairs[0] = Binding({payer: address(0), operator: operator});
@@ -193,12 +191,10 @@ contract SRAAdversarial is SRATestBase {
         address payer = makeAddr("payer");
         address operator = makeAddr("operator");
         vm.prank(owner1);
-        sra.reassignBinding(payer, operator, address(0));
-        vm.prank(owner2);
-        sra.reassignBinding(payer, operator, address(0));
-        vm.roll(block.number + SRA_CANCEL_HOLD);
+        sra.reassignBinding(payer, operator, address(0), false); // vote 1 (approve)
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.NotAdmitted.selector, address(0)));
-        sra.reassignBinding(payer, operator, address(0));
+        vm.prank(owner2);
+        sra.reassignBinding(payer, operator, address(0), false); // vote 2 executes the body -> revert
     }
 
     // ------------------------------------------------------------------------
@@ -254,7 +250,7 @@ contract SRAAdversarial is SRATestBase {
     /// registerPairs with an empty array is a no-op and succeeds.
     function test_RegisterPairs_EmptyArray_Accepted() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         Binding[] memory empty = new Binding[](0);
         _registerPairsAs(orch, empty);
@@ -304,8 +300,8 @@ contract SRAAdversarial is SRATestBase {
     function test_MultiOrchestrator_AtMaxStableUsd_ConservesShares() public {
         address a = makeAddr("agg-a");
         address b = makeAddr("agg-b");
-        _admit(a);
-        _admit(b);
+        _admit(a, a);
+        _admit(b, b);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(a, 0, _fpv(1e30));
@@ -388,7 +384,7 @@ contract SRAAdversarial is SRATestBase {
     /// activeQ-1's data (0 for a gap).
     function test_PostVolume_SkipsGapQuarter() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(2) + 1); // Q2 posting window; Q1 is a gap (no writes)
         _postAs(orch, 2, _fpv(100e18));
@@ -400,7 +396,7 @@ contract SRAAdversarial is SRATestBase {
     /// verification window succeeds; Q1 was unwritten).
     function test_CorrectVolume_SkipsGapQuarter() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(2) + POST_PERIOD + 1); // Q2 verification window; activeQ still 0
         _correctVolume(orch, 2, _fpv(100e18));
@@ -412,8 +408,8 @@ contract SRAAdversarial is SRATestBase {
     function test_GapQuarter_NoDeadlock() public {
         address a = makeAddr("a");
         address b = makeAddr("b");
-        _admit(a);
-        _admit(b);
+        _admit(a, a);
+        _admit(b, b);
 
         vm.roll(_qEnd(0) + 1); // Q0 posting window
         _postAs(a, 0, _fpv(100e18));

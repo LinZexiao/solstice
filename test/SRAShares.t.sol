@@ -104,8 +104,8 @@ contract SRASharesTest is SRATestBase {
     /// the existing share map stands (FIP: "SplitRule is not evaluated and the existing share map stands").
     function test_SubmitShares_AllZero_NoOp_KeepsMap() public {
         // two orchestrators admitted but nobody posted
-        _admit(makeAddr("orchA"));
-        _admit(makeAddr("orchB"));
+        _admit(makeAddr("orchA"), makeAddr("orchA"));
+        _admit(makeAddr("orchB"), makeAddr("orchB"));
 
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
@@ -141,7 +141,7 @@ contract SRASharesTest is SRATestBase {
     /// Strategy 10/12: submitShares with a post of USD value from the off-chain conversion (FIPs#1275).
     function test_SubmitShares_PostedUsd_Proportional() public {
         address a = makeAddr("orchA");
-        _admit(a);
+        _admit(a, a);
         // orchestrator a posts a single USD total (off-chain conversion folded the FIL contribution in)
         vm.roll(_qEnd(0) + 1);
         vm.prank(a);
@@ -168,7 +168,7 @@ contract SRASharesTest is SRATestBase {
     /// @dev Admits and (in the current posting window) posts a pure-stablecoin FilecoinPayVolume; returns the orchestrator address.
     function _admitAndPost(uint256 stableUsd) internal returns (address orch) {
         orch = makeAddr(string.concat("orch-", vm.toString(_orchSalt++))); // T5: increasing salt for unique addresses
-        _admit(orch);
+        _admit(orch, orch);
         vm.roll(_qEnd(0) + 1); // posting window
         _postAs(orch, 0, _fpv(stableUsd));
     }
@@ -225,8 +225,8 @@ contract SRASharesTest is SRATestBase {
         // Quarter 0: A (100e18), B (200e18)
         address a = makeAddr("orchA-q0");
         address b = makeAddr("orchB-q0");
-        _admit(a);
-        _admit(b);
+        _admit(a, a);
+        _admit(b, b);
         vm.roll(_qEnd(0) + 1);
         _postAs(a, 0, _fpv(100e18));
         _postAs(b, 0, _fpv(200e18));
@@ -243,7 +243,7 @@ contract SRASharesTest is SRATestBase {
 
         // Quarter 1: only C posts
         address c = makeAddr("orchC-q1");
-        _admit(c);
+        _admit(c, c);
         vm.roll(_qEnd(1) + 1);
         _postAs(c, 1, _fpv(100e18));
 
@@ -274,7 +274,7 @@ contract SRASharesTest is SRATestBase {
 
         // Q1: B posts, bind Q1 (becomes the latest bound quarter)
         address b = makeAddr("orchB-q1");
-        _admit(b);
+        _admit(b, b);
         vm.roll(_qEnd(1) + 1);
         _postAs(b, 1, _fpv(200e18));
         _rollTo(_qVerifyEnd(1) + 1);
@@ -328,7 +328,7 @@ contract SRASharesTest is SRATestBase {
     /// was uncovered — coverage line 508's revert branch missing)
     function test_SubmitShares_BeforeBinding_Reverts() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
 
@@ -370,18 +370,16 @@ contract SRASharesTest is SRATestBase {
     function test_Replace_HistoricalQuarterFilecoinPayVolume_Kept() public {
         address oldOrch = makeAddr("hist-old");
         address newOrch = makeAddr("hist-new");
-        _admit(oldOrch);
+        _admit(oldOrch, oldOrch);
         vm.roll(_qEnd(0) + 1); // q0 posting window
         _postAs(oldOrch, 0, _fpv(100e18));
 
         // governance replace(old -> new) inside q0's verification window (before binding)
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
-        sra.replace(oldOrch, newOrch);
+        sra.replaceWallet(oldOrch, newOrch, "");
         vm.prank(owner2);
-        sra.replace(oldOrch, newOrch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.replace(oldOrch, newOrch);
+        sra.replaceWallet(oldOrch, newOrch, ""); // second vote executes (unanimousNoHold)
 
         // submit q0 after binding: the old address's posted FilecoinPayVolume is still aggregated under the same identity
         _rollTo(_qVerifyEnd(0) + 1);
@@ -402,7 +400,7 @@ contract SRASharesTest is SRATestBase {
     function test_Replace_ShareMap_WritesNewWallet() public {
         address oldOrch = makeAddr("wallet-old");
         address newOrch = makeAddr("wallet-new");
-        _admit(oldOrch);
+        _admit(oldOrch, oldOrch);
         vm.roll(_qEnd(0) + 1); // q0 posting window
         _postAs(oldOrch, 0, _fpv(50e18));
         _admitAndPost(50e18); // second orchestrator keeps the split non-trivial
@@ -410,11 +408,9 @@ contract SRASharesTest is SRATestBase {
         // replace(old -> new) inside the verification window
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
-        sra.replace(oldOrch, newOrch);
+        sra.replaceWallet(oldOrch, newOrch, "");
         vm.prank(owner2);
-        sra.replace(oldOrch, newOrch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.replace(oldOrch, newOrch);
+        sra.replaceWallet(oldOrch, newOrch, ""); // second vote executes (unanimousNoHold)
 
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
@@ -429,18 +425,16 @@ contract SRASharesTest is SRATestBase {
     function test_Replace_CorrectVolume_NewAddress_CorrectsHistoricalQuarter() public {
         address oldOrch = makeAddr("cv-old");
         address newOrch = makeAddr("cv-new");
-        _admit(oldOrch);
+        _admit(oldOrch, oldOrch);
         vm.roll(_qEnd(0) + 1); // q0 posting window
         _postAs(oldOrch, 0, _fpv(100e18));
 
         // replace within the verification window, then correct via the NEW address
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
-        sra.replace(oldOrch, newOrch);
+        sra.replaceWallet(oldOrch, newOrch, "");
         vm.prank(owner2);
-        sra.replace(oldOrch, newOrch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.replace(oldOrch, newOrch);
+        sra.replaceWallet(oldOrch, newOrch, ""); // second vote executes (unanimousNoHold)
 
         _correctVolume(newOrch, 0, 200e18); // correction via the new wallet hits the same identity
 
