@@ -20,6 +20,7 @@ import {Epoch, currentEpoch} from "./lib/Epoch.sol";
 import {FixedU18, ONE, ZERO} from "./lib/FixedU18.sol";
 import {FVMRewards} from "./lib/FVMRewards.sol";
 import {SERVICE_ID, Share} from "./lib/FVMRewardTypes.sol";
+import {BURN_ADDRESS} from "fvm-solidity/FVMActors.sol";
 import {OwnersLibrary} from "./lib/Owners.sol";
 import {UnanimousGovernance} from "./lib/UnanimousGovernance.sol";
 import {IsASafe} from "./lib/IsASafe.sol";
@@ -324,6 +325,11 @@ contract ServiceRewardsActor is UnanimousGovernance {
         if (id != lastId) r.orchestrators[lastId].admittedIndex = idx;
         // dead pointer: the removed id leaves the list, its index no longer addresses a live slot
         delete o.admittedIndex;
+        // f099 immediate map push: the removed id's slice burns from the moment the removal binds —
+        // its entry is repointed to f099, survivors' shares stay untouched until the next SubmitShares
+        // (spec §2.4.4; a removal cannot bind inside an ended-quarter window, so the snapshot is the
+        // last submitted map and the push keeps Σ==1e18).
+        _pushRemovedToBurn(id);
         emit OrchestratorRemoved(orch, reason);
     }
 
@@ -347,6 +353,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         r.activeIdOf[newOrch] = id;
         r.orchestrators[id].wallet = newOrch;
         // admittedIds unchanged (stores ids); bindings/fpv state all follow the id.
+        // Immediate wallet-swap push: the id's share stays (prospective — identity and accrued do not
+        // move), only the map's wallet for this id is replaced (spec §3.2). Snapshot id→share unchanged.
+        _pushWalletSwap(id, newOrch);
         emit OrchestratorWalletReplaced(oldOrch, newOrch, extradata);
     }
 
@@ -486,6 +495,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
             return;
         }
         Share[] memory shares = new Share[](r.admittedIds.length);
+        uint64[] memory shareIds = new uint64[](r.admittedIds.length); // parallel: id of each collected entry
         uint256 count = 0;
         // Sum over the collected entries (the current admitted ids) — self-consistent with the
         // collection. The quarter counter (totalUsd) is a binding snapshot that can outlive a
@@ -502,6 +512,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
                 if (o.fpv == ZERO) continue;
                 shares[count] = Share({wallet: o.wallet, share: o.fpv});
             }
+            shareIds[count] = id;
             total = total + shares[count].share;
             count++;
         }
@@ -519,13 +530,18 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // Real f02 SetShares rejects share==0 entries (as does the mock), so drop them here.
         uint256 kept = 0;
         for (uint256 i = 0; i < shares.length; i++) {
-            if (shares[i].share > ZERO) shares[kept++] = shares[i];
+            if (shares[i].share > ZERO) {
+                shares[kept] = shares[i];
+                shareIds[kept] = shareIds[i];
+                kept++;
+            }
         }
         if (kept < shares.length) {
             assembly ("memory-safe") {
                 mstore(shares, kept)
             }
         }
+        _storeLastShares(shareIds, shares, kept);
 
         qt.nextQuarter = q + 1; // CEI: mark before the external call
         FVMRewards.setShares(SERVICE_ID, shares);
@@ -680,5 +696,68 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 lastId = list[list.length - 1];
         if (idx != list.length - 1) list[idx] = lastId;
         list.pop();
+    }
+
+    /// @dev Replaces the LastShares snapshot with the freshly submitted map. The f02 share map has
+    ///      no read-back (FVMRewardMethod has no GET_SHARES), so SRA keeps id→share locally to
+    ///      drive the immediate f099 push on removeOrchestrator / the wallet swap on replaceWallet.
+    ///      shareIds parallels shares (same order, same trim); both carry only share>0 entries.
+    function _storeLastShares(uint64[] memory shareIds, Share[] memory shares, uint256 kept) internal {
+        SraStorage.SraStorageLastShares storage ls = SraStorage.lastShares();
+        uint64[] storage ids = ls.lastShareIds;
+        for (uint256 i = 0; i < ids.length; i++) {
+            ls.lastShares[ids[i]] = ZERO; // FixedU18: assignment clears (no delete on struct-like)
+        }
+        while (ids.length > 0) {
+            ids.pop();
+        }
+        for (uint256 i = 0; i < kept; i++) {
+            ls.lastShares[shareIds[i]] = shares[i].share;
+            ids.push(shareIds[i]);
+        }
+    }
+
+    /// @dev Immediate f099 push on removeOrchestrator (spec §2.4.4): the removed id's entry is
+    ///      repointed to BURN_ADDRESS; previously removed ids (admitted=false) keep burning too, so
+    ///      repeated removes accumulate f099 rows and Σ stays 1e18. The snapshot mirrors the last
+    ///      submitted map and is not pruned here — the next SubmitShares rebuilds it. No push when
+    ///      the snapshot has no entry for the id (nothing to repoint). CEI: after the registry write
+    ///      (id already de-admitted), before the emit.
+    function _pushRemovedToBurn(uint64 removedId) internal {
+        SraStorage.SraStorageLastShares storage ls = SraStorage.lastShares();
+        if (FixedU18.unwrap(ls.lastShares[removedId]) == 0) return; // no snapshot entry → no push
+        uint64[] storage ids = ls.lastShareIds;
+        Share[] memory push = new Share[](ids.length);
+        for (uint256 i = 0; i < ids.length; i++) {
+            uint64 id = ids[i];
+            push[i] = Share({wallet: _liveWalletOrBurn(id), share: ls.lastShares[id]});
+        }
+        FVMRewards.setShares(SERVICE_ID, push);
+    }
+
+    /// @dev Immediate wallet-swap push on replaceWallet: the swapped id's snapshot share stays, only
+    ///      its wallet is replaced; previously removed ids keep burning (admitted=false), so the push
+    ///      map preserves Σ==1e18. Snapshot id→share is unchanged (prospective semantics: identity
+    ///      and accrued stay put). No push when the snapshot has no entry for the id.
+    function _pushWalletSwap(uint64 swappedId, address newWallet) internal {
+        SraStorage.SraStorageLastShares storage ls = SraStorage.lastShares();
+        if (FixedU18.unwrap(ls.lastShares[swappedId]) == 0) return; // no snapshot entry → no push
+        uint64[] storage ids = ls.lastShareIds;
+        Share[] memory push = new Share[](ids.length);
+        for (uint256 i = 0; i < ids.length; i++) {
+            uint64 id = ids[i];
+            address wallet = id == swappedId ? newWallet : _liveWalletOrBurn(id);
+            push[i] = Share({wallet: wallet, share: ls.lastShares[id]});
+        }
+        FVMRewards.setShares(SERVICE_ID, push);
+    }
+
+    /// @dev Push wallet for a snapshot id: a removed id (admitted=false, wallet retained for audit)
+    ///      keeps burning — its f099 row must survive every push for Σ==1e18, so both push paths
+    ///      repoint historical removals to f099 alongside the current one.
+    function _liveWalletOrBurn(uint64 id) internal view returns (address wallet) {
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
+        wallet = r.orchestrators[id].wallet;
+        if (!r.orchestrators[id].admitted) wallet = BURN_ADDRESS;
     }
 }

@@ -57,6 +57,7 @@ struct Stream {
     DistributionKind kind;
     address writer;
     Share[] shares;
+    uint256 strippedBurn; // f099 share total stripped from the last SetShares (f099 rows are not stored)
     uint256 accrued;
     Ledger payableLedger;
     Ledger claimedPeriod;
@@ -254,6 +255,12 @@ contract FVMRewardActor {
         return _streams[streamId].shares;
     }
 
+    /// @notice Test helper: the f099 share total stripped from the last SetShares (f02 does not
+    ///      store f099 rows, spec §2.4.4); stored + stripped == 1e18 whenever the last push was valid.
+    function strippedBurnOf(uint64 streamId) external view returns (uint256) {
+        return _streams[streamId].strippedBurn;
+    }
+
     /// @notice Test helper: read back a live stream's payable ledger directly.
     function getPayable(uint64 streamId) external view returns (LedgerRow[] memory) {
         return _ledgerView(_streams[streamId].payableLedger);
@@ -364,7 +371,7 @@ contract FVMRewardActor {
         _foldAndBurnResidue(s);
 
         delete s.shares;
-        _pushNonBurnShares(s.shares, newShares);
+        s.strippedBurn = _pushNonBurnShares(s.shares, newShares);
         return (0, 0, "");
     }
 
@@ -1278,9 +1285,13 @@ contract FVMRewardActor {
         }
     }
 
-    function _pushNonBurnShares(Share[] storage target, Share[] memory shares) internal {
+    /// @dev Copies non-f099 rows into storage; returns the stripped f099 share total so callers can
+    ///      record it (f02 stores the map with f099 rows removed, spec §2.4.4 — the burn slice is
+    ///      settled at award time, not stored as a recipient).
+    function _pushNonBurnShares(Share[] storage target, Share[] memory shares) internal returns (uint256 stripped) {
         for (uint256 i = 0; i < shares.length; i++) {
             if (shares[i].wallet != BURN_ADDRESS) target.push(shares[i]);
+            else stripped += FixedU18.unwrap(shares[i].share);
         }
     }
 

@@ -338,6 +338,13 @@ contract SRAInvariantHandler is SRATestBase {
         return rewardActor().getShares(SERVICE_ID);
     }
 
+    /// @dev f099 share total stripped from the last SetShares push (f02 stores no f099 rows) —
+    ///      stored + stripped == 1e18 whenever the last push was valid, including after a
+    ///      removeOrchestrator f099 push that repoints a removed id's entry to the burn address.
+    function lastStrippedBurn() external view returns (uint256) {
+        return rewardActor().strippedBurnOf(SERVICE_ID);
+    }
+
     function everSubmitted() external view returns (bool) {
         return _everSubmitted;
     }
@@ -510,12 +517,14 @@ contract SRAInvariantTest is Test {
     function invariant_SumShares_IsShareTotal() public view {
         if (!handler.everSubmitted()) return; // never successfully submitted; no shares to query
         Share[] memory shares = handler.getServiceShares();
-        if (shares.length == 0) return;
         uint256 sum;
         for (uint256 i = 0; i < shares.length; i++) {
             sum += FixedU18.unwrap(shares[i].share);
         }
-        assertEq(sum, 1e18, "I1: sum of shares must equal SHARE_TOTAL");
+        // f02 stores the map with f099 rows removed (spec §2.4.4); a removeOrchestrator f099 push
+        // repoints the removed id's entry to BURN_ADDRESS, so stored sum alone drops below 1e18.
+        // The invariant holds on the full map: stored + stripped (the f099 burn slice) == 1e18.
+        assertEq(sum + handler.lastStrippedBurn(), 1e18, "I1: sum of shares must equal SHARE_TOTAL");
     }
 
     /// I2 Binding uniqueness: every pair's bindingOf must == the handler-recorded last binder
@@ -582,8 +591,13 @@ contract SRAInvariantTest is Test {
         if (total > 0) {
             // The implementation trims zero-share entries (largest-remainder can floor a tiny
             // usd to 0 when the residue top-up round count is smaller than the active count),
-            // so the map holds a non-empty subset of the active orchestrators, all non-zero.
-            assertGt(shares.length, 0, "A3: non-zero total must produce at least one share");
+            // so the map holds a non-empty subset of the active orchestrators, all non-zero —
+            // unless a later removeOrchestrator f099 push burned every stored entry (f099 rows are
+            // stripped from storage, spec §2.4.4); then the stripped total carries the shares.
+            if (shares.length == 0) {
+                assertGt(handler.lastStrippedBurn(), 0, "A3: all shares burned must be recorded as stripped f099");
+                return;
+            }
             assertLe(shares.length, count, "A3: share count must not exceed active orchestrator count");
             for (uint256 i = 0; i < shares.length; i++) {
                 assertGt(FixedU18.unwrap(shares[i].share), 0, "A3: trimmed map must contain only non-zero shares");
