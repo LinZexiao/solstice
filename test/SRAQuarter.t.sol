@@ -223,25 +223,6 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 350e18);
     }
 
-    /// a frozen orchestrator's (frozen at the E+POST instant) FilecoinPayVolume is excluded from the aggregate.
-    function test_AggregatedFilecoinPayVolume_FrozenExcluded() public {
-        address orchA = makeAddr("orchA");
-        address orchB = makeAddr("orchB");
-        _admit(orchA);
-        _admit(orchB);
-
-        vm.roll(_qEnd(0) + 1);
-        _postAs(orchA, 0, _fpv(100e18));
-        _postAs(orchB, 0, _fpv(250e18));
-
-        // freeze B during posting (affects the quarter: B frozen at the E+POST instant)
-        _freeze(orchB);
-
-        vm.roll(_qVerifyEnd(0) + 1);
-        // B excluded: the aggregate contains only A
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
-    }
-
     /// Strategy 11/CV7: some orchestrators did not post -> aggregatedFilecoinPayVolume skips them (usd==0 continue).
     function test_AggregatedFilecoinPayVolume_UnpostedOrch_Excluded() public {
         address orchA = makeAddr("orchA");

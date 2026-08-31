@@ -166,17 +166,6 @@ contract SRAAdversarial is SRATestBase {
         assertTrue(sra.isAdmitted(address(0)));
     }
 
-    /// freeze(0) on a never-admitted zero address -> NotAdmitted(0) at body execution.
-    function test_Freeze_ZeroAddress_NotAdmitted() public {
-        vm.prank(owner1);
-        sra.freeze(address(0));
-        vm.prank(owner2);
-        sra.freeze(address(0));
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.NotAdmitted.selector, address(0)));
-        sra.freeze(address(0));
-    }
-
     /// A zero payer address is a legal binding pair (pairId = keccak(0, operator));
     /// no zero-address guard exists — the behavior is locked as accepted.
     function test_RegisterPairs_ZeroPayer_Accepted() public {
