@@ -249,26 +249,12 @@ contract SRAGovernanceTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // E2: constructor parameter validation (deployment-time bounds, aligned with setPricingParams)
+    // E2: constructor parameter validation (deployment-time bounds)
     // ------------------------------------------------------------------------
 
-    /// E2: the constructor rejects invalid configuration — priceBand > BASIS_POINTS /
-    ///     epochsPerQuarter=0 (each reverts InvalidParameter at deploy).
+    /// E2: the constructor rejects invalid configuration — epochsPerQuarter=0
+    ///     (reverts InvalidParameter at deploy).
     function test_Constructor_InvalidParams_Reverts() public {
-        // priceBand > BASIS_POINTS
-        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
-        new ServiceRewardsActor(
-            owner1,
-            owner2,
-            Epoch.wrap(EPOCHS_PER_QUARTER),
-            Epoch.wrap(POST_PERIOD),
-            Epoch.wrap(VERIFICATION_WINDOW),
-            Epoch.wrap(SRA_CANCEL_HOLD),
-            Epoch.wrap(ACTIVATION_EPOCH),
-            MIN_LOT,
-            10001
-        );
-
         // epochsPerQuarter == 0
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
         new ServiceRewardsActor(
@@ -277,9 +263,7 @@ contract SRAGovernanceTest is SRATestBase {
             Epoch.wrap(0),
             Epoch.wrap(POST_PERIOD),
             Epoch.wrap(VERIFICATION_WINDOW),
-            Epoch.wrap(ACTIVATION_EPOCH),
-            MIN_LOT,
-            PRICE_BAND
+            Epoch.wrap(ACTIVATION_EPOCH)
         );
     }
 

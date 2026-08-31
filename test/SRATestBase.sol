@@ -7,9 +7,8 @@ pragma solidity ^0.8.36;
 // and constructor parameters the implementation must match.
 //
 // Test assumptions:
-//   the constructor signature (9 params) is a test-side derivation
+//   the constructor signature (7 params) is a test-side derivation
 //   FilecoinPayVolume is a single USD total (FIP-0118 FIPs#1275: off-chain conversion)
-//   PRICE_BAND in basis points (2000 = allows ±20% deviation); authoritative for the off-chain indexer
 
 import {SafeProxy} from "@safe/proxies/SafeProxy.sol";
 
@@ -37,8 +36,6 @@ contract SRATestBase is MockRewardTest {
     uint64 internal constant POST_PERIOD = 300;
     uint64 internal constant VERIFICATION_WINDOW = 400;
     uint64 internal constant ACTIVATION_EPOCH = 100_000;
-    uint256 internal constant MIN_LOT = 100; // 100 USD (lot face value; authoritative for the off-chain indexer, FIPs#1275)
-    uint256 internal constant PRICE_BAND = 2000; // 20% (basis points), test threshold
 
     function setUp() public virtual override {
         super.setUp();
@@ -50,9 +47,7 @@ contract SRATestBase is MockRewardTest {
             Epoch.wrap(EPOCHS_PER_QUARTER),
             Epoch.wrap(POST_PERIOD),
             Epoch.wrap(VERIFICATION_WINDOW),
-            Epoch.wrap(ACTIVATION_EPOCH),
-            MIN_LOT,
-            PRICE_BAND
+            Epoch.wrap(ACTIVATION_EPOCH)
         );
         _registerServiceStream();
     }

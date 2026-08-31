@@ -14,13 +14,14 @@ pragma solidity ^0.8.36;
 // Principles:
 //   * every revert assertion uses an exact error selector (no bare expectRevert)
 //   * existing coverage is NOT duplicated: V1/V2/V3 max-value rejects live in
-//     SRAOverflowDoS.t.sol; B1 minLot upper bound in SRAQuarter; C1/F2 array
+//     SRAOverflowDoS.t.sol; C1/F2 array
 //     length bounds in SRARegistry/SRAGovernance; E1/E2 in SRAGovernance.
 //     This file adds: q-parameter window boundaries, fpv exact-limit accept /
-//     limit+1 reject, zero-address probes, setPricingParams full boundary grid,
+//     limit+1 reject, zero-address probes, setPricingParams parameter grid,
 //     empty-array semantics, and the multi-orchestrator aggregate bound.
 
 import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
 import {Binding} from "../src/lib/SraTypes.sol";
@@ -115,9 +116,7 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(1 << 40), // EPOCHS_PER_QUARTER: uint64.max × 2^40 ≈ 2^104 > 2^64
             Epoch.wrap(POST_PERIOD),
             Epoch.wrap(VERIFICATION_WINDOW),
-            Epoch.wrap(ACTIVATION_EPOCH),
-            MIN_LOT,
-            PRICE_BAND
+            Epoch.wrap(ACTIVATION_EPOCH)
         );
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
         big.qEnd(type(uint64).max);
@@ -197,47 +196,75 @@ contract SRAAdversarial is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // 4. setPricingParams full parameter boundary grid
-    //    (B1 already covers minLot = MAX_LOT_USD + 1 rejection; this adds the
-    //     remaining accept edges of each parameter)
+    // 4. setPricingParams parameter grid (stores nothing — event-only)
+    //    FIPs#1277 (spec §2.3): MIN_LOT_FLOOR (atto-USD), MIN_LOT_ALPHA
+    //    (rational, numerator + denominator), PRICE_BAND (basis points).
+    //    Binds at once (unanimousNoHold — the second vote executes the call).
     // ------------------------------------------------------------------------
 
-    function _setPricingParams(uint256 minLot, uint256 priceBand) internal {
+    /// @dev Calls setPricingParams twice (bind-at-once: the second vote executes the body) and
+    ///      asserts the PricingParamsUpdated event carries exactly the given values. The
+    ///      unanimousNoHold modifier also emits Submitted/Approved (governance vote records), so
+    ///      the parameter event is extracted from the recorded logs rather than expectEmit.
+    function _setPricingParams(uint256 floor, uint256 alphaNum, uint256 alphaDen, uint256 band) internal {
+        vm.recordLogs();
         vm.prank(owner1);
-        sra.setPricingParams(minLot, priceBand);
+        sra.setPricingParams(floor, alphaNum, alphaDen, band);
         vm.prank(owner2);
-        sra.setPricingParams(minLot, priceBand);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.setPricingParams(minLot, priceBand);
+        sra.setPricingParams(floor, alphaNum, alphaDen, band);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 topic = ServiceRewardsActor.PricingParamsUpdated.selector;
+        uint256 hits;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] != topic) continue;
+            hits++;
+            (uint256 f, uint256 an, uint256 ad, uint256 b) =
+                abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
+            assertEq(f, floor);
+            assertEq(an, alphaNum);
+            assertEq(ad, alphaDen);
+            assertEq(b, band);
+        }
+        assertEq(hits, 1, "PricingParamsUpdated emitted once");
     }
 
-    /// priceBand = 0 (tightest band) is a valid parameter — accepted.
-    function test_SetPricingParams_PriceBandZero_Accepted() public {
-        _setPricingParams(MIN_LOT, 0);
-        (uint256 minLot, uint256 priceBand) = sra.getPricingParams();
-        assertEq(minLot, MIN_LOT);
-        assertEq(priceBand, 0);
+    /// band = 0 (tightest band) is a valid parameter — accepted.
+    function test_SetPricingParams_BandZero_Accepted() public {
+        _setPricingParams(5e17, 1, 400, 0);
     }
 
-    /// priceBand = BASIS_POINTS (100%) is a valid parameter — accepted.
-    function test_SetPricingParams_PriceBandFull_Accepted() public {
-        _setPricingParams(MIN_LOT, 10_000);
-        (, uint256 priceBand) = sra.getPricingParams();
-        assertEq(priceBand, 10_000);
+    /// band = BASIS_POINTS (100%) is a valid parameter — accepted.
+    function test_SetPricingParams_BandFull_Accepted() public {
+        _setPricingParams(5e17, 1, 400, 10_000);
     }
 
-    /// minLot = 1e30 (large) is accepted (governance-trusted parameter for the off-chain indexer).
-    function test_SetPricingParams_MinLotLarge_Accepted() public {
-        _setPricingParams(1e30, PRICE_BAND);
-        (uint256 minLot,) = sra.getPricingParams();
-        assertEq(minLot, 1e30);
+    /// band > BASIS_POINTS (10000) is rejected with InvalidParameter.
+    function test_SetPricingParams_BandOverMax_Rejected() public {
+        vm.prank(owner1);
+        sra.setPricingParams(5e17, 1, 400, 10_001);
+        vm.prank(owner2);
+        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
+        sra.setPricingParams(5e17, 1, 400, 10_001);
     }
 
-    /// minLot = 0 (no floor) is accepted.
-    function test_SetPricingParams_MinLotZero_Accepted() public {
-        _setPricingParams(0, PRICE_BAND);
-        (uint256 minLot,) = sra.getPricingParams();
-        assertEq(minLot, 0);
+    /// alphaDen = 0 (undefined rational) is rejected with InvalidParameter.
+    function test_SetPricingParams_AlphaDenZero_Rejected() public {
+        vm.prank(owner1);
+        sra.setPricingParams(5e17, 1, 0, 3000);
+        vm.prank(owner2);
+        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
+        sra.setPricingParams(5e17, 1, 0, 3000);
+    }
+
+    /// floor = 1e30 (large) is accepted (governance-trusted parameter for the off-chain indexer).
+    function test_SetPricingParams_FloorLarge_Accepted() public {
+        _setPricingParams(1e30, 1, 400, 3000);
+    }
+
+    /// floor = 0 (no floor) is accepted.
+    function test_SetPricingParams_FloorZero_Accepted() public {
+        _setPricingParams(0, 1, 400, 3000);
     }
 
     // ------------------------------------------------------------------------
@@ -332,9 +359,7 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(500), // EPOCHS
             Epoch.wrap(300), // POST
             Epoch.wrap(400), // VERIFY: 300 + 400 = 700 > 500 -> overlap
-            Epoch.wrap(ACTIVATION_EPOCH),
-            MIN_LOT,
-            PRICE_BAND
+            Epoch.wrap(ACTIVATION_EPOCH)
         );
     }
 
@@ -349,9 +374,7 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(type(uint64).max), // EPOCHS: 2^64 - 1
             Epoch.wrap(uint64(2 ** 63)), // POST
             Epoch.wrap(uint64(2 ** 63)), // VERIFY: uint64 sum wraps to 0; uint256 sum = 2^64 > EPOCHS -> rejected
-            Epoch.wrap(ACTIVATION_EPOCH),
-            MIN_LOT,
-            PRICE_BAND
+            Epoch.wrap(ACTIVATION_EPOCH)
         );
     }
 
@@ -366,9 +389,7 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(700), // EPOCHS
             Epoch.wrap(300), // POST
             Epoch.wrap(400), // VERIFY: 300 + 400 = 700 == EPOCHS -> rejected (strict)
-            Epoch.wrap(ACTIVATION_EPOCH),
-            MIN_LOT,
-            PRICE_BAND
+            Epoch.wrap(ACTIVATION_EPOCH)
         );
     }
 
