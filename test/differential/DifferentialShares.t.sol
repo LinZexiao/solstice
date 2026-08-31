@@ -71,7 +71,7 @@ contract DifferentialSharesTest is SRATestBase {
 
     // ------------------------------------------------------------------------
     // 2. FilecoinPayVolume aggregation (FIPs#1275: single USD total — the aggregate is a plain sum;
-    //    hand-written cases exercise the contract's sum + frozen exclusion)
+    //    hand-written cases exercise the contract's sum)
     // ------------------------------------------------------------------------
 
     /// Single orchestrator: aggregatedFilecoinPayVolume == its posted USD total.
@@ -103,31 +103,6 @@ contract DifferentialSharesTest is SRATestBase {
 
         _rollTo(_qVerifyEnd(0) + 1);
         assertEq(FixedU18.unwrap(s.aggregatedFilecoinPayVolume(0)), expected);
-    }
-
-    /// Frozen orchestrator excluded from the aggregate.
-    function test_Diff_Aggregate_FrozenExcluded() public {
-        ServiceRewardsActor s = _newSra();
-        address a = makeAddr("agg-a");
-        address b = makeAddr("agg-b");
-        _admitOn(s, a);
-        _admitOn(s, b);
-        vm.roll(_qEnd(0) + 1);
-        vm.prank(a);
-        s.postVolume(0, FixedU18.wrap(100e18));
-        vm.prank(b);
-        s.postVolume(0, FixedU18.wrap(250e18));
-
-        // freeze b during posting
-        vm.prank(owner1);
-        s.freeze(b);
-        vm.prank(owner2);
-        s.freeze(b);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        s.freeze(b);
-
-        _rollTo(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(s.aggregatedFilecoinPayVolume(0)), 100e18); // b excluded
     }
 
     // ------------------------------------------------------------------------
