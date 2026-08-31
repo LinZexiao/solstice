@@ -15,8 +15,8 @@ pragma solidity ^0.8.36;
 //
 // Handler design:
 //   - inherits SRATestBase (auto-deploys SRA + Safe owners + service stream 2)
-//   - 11 random operations (fuzzer targets): admit/remove/replace/
-//     reassignBinding/registerPairs/postVolume/correctVolume/
+//   - 12 random operations (fuzzer targets): admit/remove/replace/
+//     reassignBinding/registerPairs/cancelBinding/postVolume/correctVolume/
 //     submitShares/parkAdmit/completeParked/rollForward
 //     (finalizeConversion removed by FIPs#1275)
 //   - time model: governance operations execute on the second vote (unanimousNoHold, no hold window);
@@ -181,6 +181,32 @@ contract SRAInvariantHandler is SRATestBase {
         vm.prank(owner2);
         sra.reassignBinding(payer, operator, orch, false); // second vote executes (unanimousNoHold)
         _setBound(payer, operator, orch);
+        _recordExecuted(taskId);
+    }
+
+    /// @notice Governance release of a binding: the pair returns to unclaimed and becomes claimable
+    ///         by anyone again (spec §4.2). The guard mirrors registerPairs's AlreadyBound check —
+    ///         only a live binding (binder still admitted at its recorded identity) can be canceled;
+    ///         a removed/superseded binder's binding already reads as unclaimed under registerPairs
+    ///         semantics, so canceling it would revert PairNotBound. Claim and cancel stay mutually
+    ///         exclusive: registerPairs claims exactly when cancel reverts, and vice versa.
+    function cancelBinding(uint256 pairIdx) external {
+        (address payer, address operator) = _pickPair(pairIdx);
+        bytes32 pairId = keccak256(abi.encode(payer, operator));
+        uint256 idx = _pairIdx[pairId];
+        if (idx == 0) return; // never bound -> contract reverts PairNotBound; skip
+        PairRecord storage p = _pairs[idx - 1];
+        if (!_admitted[p.boundOrch]) return; // binder removed -> already unclaimed, cancel reverts
+        if (_idGen[p.boundOrch] != p.gen) return; // binder's identity superseded -> same
+        bytes32 taskId = _taskId(sra.cancelBinding.selector, abi.encode(payer, operator));
+        vm.prank(owner1);
+        sra.cancelBinding(payer, operator);
+        vm.prank(owner2);
+        sra.cancelBinding(payer, operator); // second vote executes (unanimousNoHold)
+        // Sync the handler bookkeeping: binding released, pair unclaimed again — a later
+        // registerPairs by any other orchestrator re-binds it (I2 stays consistent).
+        p.boundOrch = address(0);
+        p.gen = 0;
         _recordExecuted(taskId);
     }
 
@@ -463,18 +489,19 @@ contract SRAInvariantTest is Test {
         // explicitly limit the handler's operation function set — excluding setUp() (public; otherwise the fuzzer would
         // treat it as a target and randomly call it, resetting the sra instance and diverging the handler's expected state
         // from reality; also the root cause of non-contract mock errors)
-        bytes4[] memory selectors = new bytes4[](11);
+        bytes4[] memory selectors = new bytes4[](12);
         selectors[0] = SRAInvariantHandler.admit.selector;
         selectors[1] = SRAInvariantHandler.remove.selector;
         selectors[2] = SRAInvariantHandler.replace.selector;
         selectors[3] = SRAInvariantHandler.reassignBinding.selector;
         selectors[4] = SRAInvariantHandler.registerPairs.selector;
-        selectors[5] = SRAInvariantHandler.postVolume.selector;
-        selectors[6] = SRAInvariantHandler.correctVolume.selector;
-        selectors[7] = SRAInvariantHandler.submitShares.selector;
-        selectors[8] = SRAInvariantHandler.parkAdmit.selector;
-        selectors[9] = SRAInvariantHandler.completeParked.selector;
-        selectors[10] = SRAInvariantHandler.rollForward.selector;
+        selectors[5] = SRAInvariantHandler.cancelBinding.selector;
+        selectors[6] = SRAInvariantHandler.postVolume.selector;
+        selectors[7] = SRAInvariantHandler.correctVolume.selector;
+        selectors[8] = SRAInvariantHandler.submitShares.selector;
+        selectors[9] = SRAInvariantHandler.parkAdmit.selector;
+        selectors[10] = SRAInvariantHandler.completeParked.selector;
+        selectors[11] = SRAInvariantHandler.rollForward.selector;
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
     }
 

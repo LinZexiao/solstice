@@ -32,6 +32,7 @@ contract SRAQuarterTest is SRATestBase {
         assertEq(FixedU18.unwrap(f.usd), 100e18);
     }
 
+
     /// E itself is not in the posting window (E < now, strictly less).
     function test_PostVolume_AtQuarterEnd_Reverts() public {
         address orch = makeAddr("orch");

@@ -27,7 +27,6 @@ contract DifferentialSharesTest is SRATestBase {
             EPOCHS_PER_QUARTER,
             POST_PERIOD,
             VERIFICATION_WINDOW,
-            SRA_CANCEL_HOLD,
             ACTIVATION_EPOCH,
             MIN_LOT,
             PRICE_BAND
@@ -123,7 +122,6 @@ contract DifferentialSharesTest is SRATestBase {
             Epoch.wrap(EPOCHS_PER_QUARTER),
             Epoch.wrap(POST_PERIOD),
             Epoch.wrap(VERIFICATION_WINDOW),
-            Epoch.wrap(SRA_CANCEL_HOLD),
             Epoch.wrap(ACTIVATION_EPOCH),
             MIN_LOT,
             PRICE_BAND
