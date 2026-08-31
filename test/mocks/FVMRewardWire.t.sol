@@ -312,7 +312,7 @@ contract FVMRewardWireTest is MockRewardWireTest {
 
     /// @dev The two address forms in one batch. A masked ID must not be emitted as f410: that
     /// names a delegated address nobody created, so it resolves nowhere and f02 rejects the call.
-    /// f099, the burn actor the freeze rule pays into, is reachable only through the first form.
+    /// f099, the burn actor, is reachable only through the first form.
     // [65536,[byte[008080808010],byte[040a1111111111111111111111111111111111111111]]]
     function test_Claim_EncodesBothAddressForms() public {
         address[] memory wallets = new address[](2);

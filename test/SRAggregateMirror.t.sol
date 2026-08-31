@@ -4,7 +4,7 @@ pragma solidity ^0.8.36;
 // Active-quarter aggregate mirror — differential tests
 //   aggregatedFilecoinPayVolume reads the O(1) mirror (totalUsd) for the active quarter; these
 //   tests pin the mirror to the linear-scan semantics across post / correct /
-//   freeze / unfreeze / replace / remove, plus the historical-quarter fallback.
+//   replace / remove, plus the historical-quarter fallback.
 //
 // Time model (test base): E(Q)=100000+Q*1000; posting (E,E+300]; verification
 //   (E+300,E+700]; post-binding > E+700. SRA_CANCEL_HOLD=100 per governance step.
@@ -40,50 +40,6 @@ contract SRAggregateMirrorTest is SRATestBase {
         vm.roll(_qEnd(0) + 1);
         _postAs(a, 0, _fpv(100e18));
 
-        vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
-    }
-
-    /// Freeze before E+POST excludes the contribution (mirror deducts).
-    function test_Mirror_FreezeInPosting_Excludes() public {
-        address a = makeAddr("a");
-        address b = makeAddr("b");
-        _admit(a);
-        _admit(b);
-
-        vm.roll(_qEnd(0) + 1);
-        _postAs(a, 0, _fpv(100e18));
-        _postAs(b, 0, _fpv(200e18));
-
-        _freeze(a); // +100 -> still inside posting window
-        vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
-    }
-
-    /// Unfreeze before E+POST re-includes the contribution (mirror adds back).
-    function test_Mirror_UnfreezeInPosting_Reincludes() public {
-        address a = makeAddr("a");
-        _admit(a);
-
-        vm.roll(_qEnd(0) + 1);
-        _postAs(a, 0, _fpv(100e18));
-
-        _freeze(a); // deduct
-        _unfreeze(a); // add back (still before E+POST)
-        vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
-    }
-
-    /// Freeze after E+POST does not change the quarter (E+POST snapshot semantics).
-    function test_Mirror_FreezeInVerification_StillIncluded() public {
-        address a = makeAddr("a");
-        _admit(a);
-
-        vm.roll(_qEnd(0) + 1);
-        _postAs(a, 0, _fpv(100e18));
-
-        vm.roll(_qPostEnd(0) + 1); // verification window
-        _freeze(a); // +100 -> after E+POST: quarter already fixed
         vm.roll(_qVerifyEnd(0) + 1);
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 100e18);
     }
@@ -147,50 +103,6 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
     }
 
-    /// Freeze (posting) then remove: the freeze already excluded the contribution, so the
-    /// removal must not deduct it again — a second deduction would
-    /// underflow the mirror).
-    function test_Mirror_FreezeThenRemove_DeductsOnce() public {
-        address a = makeAddr("a");
-        address b = makeAddr("b");
-        _admit(a);
-        _admit(b);
-
-        vm.roll(_qEnd(0) + 1);
-        _postAs(a, 0, _fpv(100e18));
-        _postAs(b, 0, _fpv(200e18));
-
-        _freeze(a); // posting window: deducts a's 100 (mirror = 200)
-        _remove(a); // must NOT deduct again
-
-        vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
-    }
-
-    /// Freeze (posting) then replace: the same single-deduction guarantee on the replace path.
-    function test_Mirror_FreezeThenReplace_DeductsOnce() public {
-        address a = makeAddr("a");
-        address b = makeAddr("b");
-        address a2 = makeAddr("a2");
-        _admit(a);
-        _admit(b);
-
-        vm.roll(_qEnd(0) + 1);
-        _postAs(a, 0, _fpv(100e18));
-        _postAs(b, 0, _fpv(200e18));
-
-        _freeze(a); // posting window: deducts a's 100 (mirror = 200)
-        vm.prank(owner1);
-        sra.replace(a, a2);
-        vm.prank(owner2);
-        sra.replace(a, a2);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.replace(a, a2); // must NOT deduct again
-
-        vm.roll(_qVerifyEnd(0) + 1);
-        assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
-    }
-
     /// Mirror switches quarters; the previous quarter falls back to the linear scan.
     function test_Mirror_QuarterSwitch_HistoricalFallback() public {
         address a = makeAddr("a");
@@ -234,30 +146,6 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertEq(shares.length, 2, "both q0 contributors from the mirror");
         assertEq(shares[0].wallet, a, "posting order: a first (mirror of a's q0 value)");
         assertEq(_shareOf(shares, a) + _shareOf(shares, b), 1e18, "shares sum to 100%");
-    }
-
-    /// A freeze before E+POST is exclusion-fixed into the mirror at the advance: the lagging
-    /// submit of that quarter reads prevFpv = 0 for the frozen orchestrator (no post-E+POST
-    /// freeze-state derivation is possible, so the flag must be snapshotted at the advance).
-    function test_Mirror_FrozenAtPostEnd_ExcludedInPrevSlot() public {
-        address a = makeAddr("a");
-        address b = makeAddr("b");
-        _admit(a);
-        _admit(b);
-
-        vm.roll(_qEnd(0) + 1);
-        _postAs(a, 0, _fpv(100e18));
-        _postAs(b, 0, _fpv(200e18));
-        _freeze(a); // posting window: excludes q=0 (frozenAtPostEnd), totalUsd 300 -> 200
-
-        vm.roll(_qEnd(1) + 1);
-        _postAs(b, 1, _fpv(50e18)); // advance: a's prevFpv is fixed to 0 (excluded), b's to 200
-
-        sra.submitShares(0); // lagging: q=0 latest bound, reads prevFpv
-        Share[] memory shares = rewardActor().getShares(SERVICE_ID);
-        assertEq(shares.length, 1, "frozen-at-E+POST excluded from the mirror");
-        assertEq(shares[0].wallet, b, "only b remains");
-        assertEq(FixedU18.unwrap(shares[0].share), 1e18, "b gets 100%");
     }
 
     /// correctVolume can be the first writer of a quarter (backfill): it triggers the mirror
