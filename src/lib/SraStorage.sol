@@ -1,20 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-import {Epoch} from "./Epoch.sol";
 import {FixedU18} from "./FixedU18.sol";
 
 library SraStorage {
     struct OrchestratorInfo {
         address wallet; // current effective wallet — 20B
         bool admitted; // admitted — 1B
-        // Frozen-at-E+POST flag: exactly "was this orchestrator frozen at the close of the
-        // posting period of the active quarter" — the fpv-effectiveness test. It changes only
-        // before E+POST (freeze/unfreeze in the posting window set/clear it); from the
-        // verification window onward it is fixed.
-        bool frozenAtPostEnd; // 1B
-        Epoch frozenSince; // 0 means not frozen — 8B
-        // word 0: the four fields above pack into one 32B word (30B)
+        // word 0: the two fields above pack into one 32B word (21B)
         FixedU18 fpv; // active quarter
         FixedU18 prevFpv; // previous quarter
         uint64 admittedIndex; // position in admittedIds
@@ -26,7 +19,7 @@ library SraStorage {
         mapping(address orch => uint64 id) activeIdOf; // current effective address -> id (0 = unregistered sentinel)
         mapping(bytes32 pairId => uint64 id) bindings; // pairId = keccak256(abi.encode(payer, operator))
         uint64 nextId; // id allocator
-        uint64[] admittedIds; // enumerable admitted (incl. frozen)
+        uint64[] admittedIds; // enumerable admitted
     }
 
     /// @custom:storage-location erc7201:Solstice.SRA.Quarter
