@@ -59,6 +59,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     event OrchestratorReplaced(address indexed oldOrchestrator, address indexed newOrchestrator);
     event BindingDeclared(address indexed payer, address indexed operator, address indexed orchestrator);
     event BindingReassigned(address indexed payer, address indexed operator, address indexed orchestrator);
+    event BindingCanceled(address indexed payer, address indexed operator, address indexed orchestrator);
     event AdmittedListsUpdated(address[] stablecoins, address[] filecoinPayContracts);
     event PricingParamsUpdated(uint256 minLot, uint256 priceBand);
     event VolumePosted(uint64 indexed q, address indexed orchestrator);
@@ -69,6 +70,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     error AlreadyAdmitted(address orch);
     error AtCapacity();
     error AlreadyBound(bytes32 pairId);
+    error PairNotBound(bytes32 pairId);
     error NotInPostingWindow(uint64 q);
     error NotInVerificationWindow(uint64 q);
     error NotBound(uint64 q);
@@ -374,6 +376,24 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = _requireAdmittedId(orch);
         SraStorage.registry().bindings[_pairId(payer, operator)] = id;
         emit BindingReassigned(payer, operator, orch);
+    }
+
+    /// @notice Governance release of a single binding: the pair returns to unclaimed and becomes claimable again.
+    /// @dev Guard is the exact mirror of registerPairs's AlreadyBound check — only a live binding (boundId != 0
+    ///      and still admitted) can be canceled; a removed orchestrator's binding already reads as unclaimed
+    ///      under registerPairs semantics (spec §4.2), so canceling it is a no-op and reverts PairNotBound.
+    ///      Claim and cancel stay mutually exclusive: registerPairs claims exactly when cancel reverts, and vice versa.
+    /// @dev The released orchestrator is carried in the event (three indexed args like BindingDeclared/
+    ///      BindingReassigned): after the delete, bindingOf returns 0, so without the orchestrator field an
+    ///      off-chain indexer could not tell who lost the binding.
+    function cancelBinding(address payer, address operator) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
+        bytes32 pairId = _pairId(payer, operator);
+        uint64 boundId = r.bindings[pairId];
+        require(boundId != 0 && r.orchestrators[boundId].admitted, PairNotBound(pairId));
+        address orch = r.orchestrators[boundId].wallet;
+        delete r.bindings[pairId];
+        emit BindingCanceled(payer, operator, orch);
     }
 
     /// @notice Owner rotation: dual-Safe, effective immediately (unanimousNoHold path,
