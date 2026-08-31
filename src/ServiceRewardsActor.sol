@@ -152,31 +152,25 @@ contract ServiceRewardsActor is UnanimousGovernance {
         return nowE > verifyEnd;
     }
 
-    /// @dev The latest quarter whose volumes are bound but whose share map has not been submitted
-    ///      (spec §3.2: RemoveOrchestrator is not callable while an ended quarter awaits its
-    ///      share map — governance clears it by cranking SubmitShares first). Mirrors submitShares'
-    ///      latest-bound-quarter determination: the latest bound quarter is activeQ if it has passed
-    ///      binding, else activeQ - 1 (an advance into a new quarter implies the previous one is past
-    ///      E+POST, hence bound). Only the *latest* bound quarter matters — a superseded quarter
-    ///      (skipped by a lag > 1) can never be submitted, so keying on it would deadlock removal.
-    ///      lastSubmittedQ is a q+1 encoding (0 = none), so "awaiting" ⟺ lastSubmittedQ != latest + 1.
+    /// @dev True while some ended quarter awaits its share map. spec §3.2: RemoveOrchestrator is
+    ///      callable only while no ended quarter awaits its share map — from the end of a quarter
+    ///      until that quarter's SubmitShares has run (posting period, verification window, any
+    ///      crank delay after them), the call reverts. Quarter q's settlement point is E(q) (its
+    ///      posting window opens at the quarter boundary — _inPostingWindow), so from the start of
+    ///      time-quarter nowQ the data quarter nowQ has already ended: it awaits SubmitShares until
+    ///      nextQuarter == nowQ + 1. Keying on the *ended* quarter rather than the latest *bound*
+    ///      one closes that window (the bound reading returned nowQ - 1 inside it, letting removal
+    ///      pass once the prior quarter had been submitted). A superseded quarter (lag > 1) can never
+    ///      be submitted, but submitShares advances nextQuarter straight to q + 1 for the latest
+    ///      bound quarter, so keying on the latest ended quarter cannot deadlock there either.
     function _pendingSharesQuarter() internal view returns (bool hasPending, uint64 q) {
         SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
-        // The latest bound quarter is a *time* property: derive it from
-        // the clock via _quarterOf, not from the activeQ cache — the cache advances only on
-        // writes, so a gap quarter (bound but unwritten) would be missed (activeQ still the
-        // previous quarter) and removal would wrongly pass. nowQ > 0 guard mirrors the genesis
-        // case below (q0's verification window: _afterBinding(0) false, nothing bound yet).
+        // The ended-quarter status is a *time* property: derive it from the clock via _quarterOf,
+        // not from the activeQ cache — the cache advances only on writes, so a gap quarter (ended
+        // but unwritten) would be missed (activeQ still the previous quarter) and removal would
+        // wrongly pass.
         uint64 nowQ = _quarterOf(currentEpoch());
-        uint64 latest;
-        if (_afterBinding(nowQ)) {
-            latest = nowQ;
-        } else if (nowQ > 0) {
-            latest = nowQ - 1;
-        } else {
-            return (false, 0); // genesis: nothing bound yet
-        }
-        if (qt.nextQuarter != latest + 1) return (true, latest);
+        if (qt.nextQuarter != nowQ + 1) return (true, nowQ);
         return (false, 0);
     }
 
@@ -315,24 +309,16 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      by cranking SubmitShares first, then removes in a later message.
     /// @dev The id record is kept (wallet/fpv/prevFpv retained for audit); only the address mapping is
     ///      cleared, so a removed id is never reachable from an address and its pairs read as unclaimed.
-    function remove(address orch) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
-        SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
+    function removeOrchestrator(address orch, string calldata reason) external unanimousNoHold(keccak256(msg.data)) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
         require(id != 0 && o.admitted, NotAdmitted(orch));
         (bool hasPending, uint64 pendingQ) = _pendingSharesQuarter();
         if (hasPending) revert PendingShares(pendingQ);
-        // Mirror: drop the active-quarter contribution from the aggregate while the quarter is not
-        // yet bound — an orchestrator removed before binding is excluded: omitted from the
-        // submitted share map (it leaves the admitted list, which submitShares collects) and its
-        // FilecoinPayVolume does not enter AggregatedFilecoinPayVolume(Q) (spec §2.2). Once the verification window has closed
-        // the aggregate is a binding snapshot (the read view exposes the bound values directly) and
-        // a later removal must not rewrite it. Removal drops the orchestrator from the admitted
-        // list, so the map and the aggregate must exclude it together for every pre-binding removal.
-        if (!_afterBinding(qt.activeQuarter) && o.fpv > ZERO) {
-            qt.totalUsd[qt.activeQuarter] = qt.totalUsd[qt.activeQuarter] - o.fpv;
-        }
+        // No aggregate deduction: the guard makes any removal post-binding (nextQuarter == nowQ + 1
+        // implies the active quarter was already submitted), so the aggregate is a binding snapshot;
+        // the orchestrator's exclusion from later quarters follows from it leaving the admitted list.
         o.admitted = false;
         r.activeIdOf[orch] = 0;
         uint64 idx = o.admittedIndex;
@@ -342,7 +328,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         if (id != lastId) r.orchestrators[lastId].admittedIndex = idx;
         // dead pointer: the removed id leaves the list, its index no longer addresses a live slot
         delete o.admittedIndex;
-        emit OrchestratorRemoved(orch);
+        emit OrchestratorRemoved(orch, reason);
     }
 
     /// @notice Operator address change (spec §4.2). Identity (contribution slots) and all bindings transfer to newOrch.
