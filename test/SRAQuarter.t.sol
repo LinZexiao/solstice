@@ -36,7 +36,7 @@ contract SRAQuarterTest is SRATestBase {
     /// the event directly instead of re-reading fpvOf after every post.
     function test_PostVolume_EmitsVolumeAmount() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1); // E+1
         vm.expectEmit(true, true, true, true, address(sra));
