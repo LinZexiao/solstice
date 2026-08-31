@@ -446,4 +446,131 @@ contract SRASharesTest is SRATestBase {
         // the corrected value (200), not the original post (100), is aggregated
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 200e18);
     }
+
+    // ------------------------------------------------------------------------
+    // W5: immediate f099 map push (FIPs#1277 §2.4.4) — removeOrchestrator / replaceWallet
+    // after a submit re-push the f02 map at once; the LastShares snapshot drives it.
+    // The spec §3.2 guard makes remove callable only outside an ended-quarter window, so all
+    // remove-push scenarios are constructed after SubmitShares has run.
+    // ------------------------------------------------------------------------
+
+    /// Remove after submit pushes the removed id's entry to f099 immediately: the stored map drops the
+    /// removed wallet (f099 rows are stripped from storage), survivors keep their shares unchanged, and
+    /// the removed slice is recorded as the stripped burn (Σ stored + stripped == 1e18).
+    function test_Remove_AfterSubmit_PushesF099Burn() public {
+        address a = makeAddr("push-a");
+        address b = makeAddr("push-b");
+        _admit(a, a);
+        _admit(b, b);
+        vm.roll(_qEnd(0) + 1);
+        _postAs(a, 0, _fpv(100e18));
+        _postAs(b, 0, _fpv(200e18));
+        _rollTo(_qVerifyEnd(0) + 1);
+        sra.submitShares(0);
+
+        Share[] memory before = rewardActor().getShares(SERVICE_ID);
+        assertEq(before.length, 2, "both contributors in the bound map");
+        uint256 bShare = _walletShare(before, b);
+
+        _remove(b, "misreport"); // post-submit removal binds immediately
+
+        Share[] memory afterMap = rewardActor().getShares(SERVICE_ID);
+        assertEq(afterMap.length, 1, "removed entry repointed to f099 leaves the stored map");
+        assertFalse(_hasWallet(afterMap, b), "removed wallet absent from stored map");
+        assertEq(_walletShare(afterMap, a), _walletShare(before, a), "survivor share unchanged until next SubmitShares");
+        assertEq(rewardActor().strippedBurnOf(SERVICE_ID), bShare, "removed slice = stripped f099 burn");
+        assertEq(
+            _sumShares(afterMap) + rewardActor().strippedBurnOf(SERVICE_ID), 1e18, "sum conserved (stored + stripped)"
+        );
+    }
+
+    /// Multiple removes keep pushing f099 rows (f099 may appear more than once in a map, spec §2.4.4):
+    /// each removed slice is stripped in turn, stored shares shrink, Σ(stored + stripped) stays 1e18.
+    function test_Remove_Repeated_PushesF099Repeatedly() public {
+        address a = makeAddr("push-a");
+        address b = makeAddr("push-b");
+        address c = makeAddr("push-c");
+        _admit(a, a);
+        _admit(b, b);
+        _admit(c, c);
+        vm.roll(_qEnd(0) + 1);
+        _postAs(a, 0, _fpv(100e18));
+        _postAs(b, 0, _fpv(200e18));
+        _postAs(c, 0, _fpv(300e18));
+        _rollTo(_qVerifyEnd(0) + 1);
+        sra.submitShares(0);
+
+        Share[] memory before = rewardActor().getShares(SERVICE_ID);
+        assertEq(before.length, 3);
+        uint256 bShare = _walletShare(before, b);
+        uint256 cShare = _walletShare(before, c);
+
+        _remove(b, "");
+        Share[] memory after1 = rewardActor().getShares(SERVICE_ID);
+        assertEq(after1.length, 2, "b removed -> two stored entries");
+        assertEq(rewardActor().strippedBurnOf(SERVICE_ID), bShare, "first remove strips b's share");
+
+        _remove(c, "");
+        Share[] memory after2 = rewardActor().getShares(SERVICE_ID);
+        assertEq(after2.length, 1, "c removed -> one stored entry");
+        assertEq(rewardActor().strippedBurnOf(SERVICE_ID), bShare + cShare, "stripped burn accumulates across removes");
+        assertEq(_walletShare(after2, a), _walletShare(before, a), "survivor a untouched through both removes");
+        assertEq(
+            _sumShares(after2) + rewardActor().strippedBurnOf(SERVICE_ID),
+            1e18,
+            "sum conserved through repeated removes"
+        );
+    }
+
+    /// Remove with no prior submit (snapshot empty) must not push: the f02 map stays as-is (the
+    /// registered initial map), so an orchestrator removed before any SubmitShares leaves no stale
+    /// entry to repoint. Guard-clean: crank a zero-volume quarter so remove is callable, then remove
+    /// a never-shared id.
+    function test_Remove_NoPriorSubmit_NoPush() public {
+        address a = makeAddr("noop-a");
+        address b = makeAddr("noop-b");
+        _admit(a, a);
+        _admit(b, b);
+        // No volume at all: submitShares(0) is a benign no-op (nextQuarter advances, no SetShares),
+        // so the registered initial map (address(sra): 1e18, set up in _registerServiceStream) stands.
+        _rollTo(_qVerifyEnd(0) + 1);
+        sra.submitShares(0);
+        Share[] memory initial = rewardActor().getShares(SERVICE_ID);
+        assertEq(initial.length, 1, "no-op submit leaves the initial map");
+
+        _remove(b, "");
+        Share[] memory afterRemove = rewardActor().getShares(SERVICE_ID);
+        assertEq(afterRemove.length, 1, "remove without snapshot does not push");
+        assertEq(_walletShare(afterRemove, address(sra)), 1e18, "initial map untouched");
+        assertEq(rewardActor().strippedBurnOf(SERVICE_ID), 0, "no stripped burn without a map");
+    }
+
+    /// Replace after submit pushes the wallet swap immediately: the id's share stays (prospective —
+    /// identity and accrued do not move), only the map's wallet for that id is replaced; Σ unchanged.
+    function test_Replace_AfterSubmit_PushesWalletSwap() public {
+        address oldOrch = makeAddr("swap-old");
+        address newOrch = makeAddr("swap-new");
+        _admit(oldOrch, oldOrch);
+        vm.roll(_qEnd(0) + 1);
+        _postAs(oldOrch, 0, _fpv(100e18));
+        _admitAndPost(100e18); // second contributor keeps the split non-trivial
+        _rollTo(_qVerifyEnd(0) + 1);
+        sra.submitShares(0);
+
+        Share[] memory before = rewardActor().getShares(SERVICE_ID);
+        uint256 oldShare = _walletShare(before, oldOrch);
+        assertGt(oldShare, 0, "old wallet holds a share before swap");
+
+        // replace after submit (no guard): swap old -> new in the live map
+        vm.prank(owner1);
+        sra.replaceWallet(oldOrch, newOrch, "rotation");
+        vm.prank(owner2);
+        sra.replaceWallet(oldOrch, newOrch, "rotation");
+
+        Share[] memory afterMap = rewardActor().getShares(SERVICE_ID);
+        assertEq(_walletShare(afterMap, newOrch), oldShare, "share moved to the new wallet at the same value");
+        assertEq(_walletShare(afterMap, oldOrch), 0, "old wallet no longer receives");
+        assertEq(_sumShares(afterMap), 1e18, "sum unchanged by the wallet swap");
+        assertEq(rewardActor().strippedBurnOf(SERVICE_ID), 0, "wallet swap strips nothing");
+    }
 }

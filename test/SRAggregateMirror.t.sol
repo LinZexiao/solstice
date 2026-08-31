@@ -380,6 +380,11 @@ contract SRAggregateMirrorTest is SRATestBase {
     /// Once the verification window closes, AggregatedFilecoinPayVolume(activeQ) is a fixed binding
     /// snapshot (spec §2.2: the read view exposes the bound values directly). A removal after
     /// binding must not rewrite it — only a pre-E+POST removal excludes the contribution.
+    /// FIPs#1277 §2.4.4: removal binds through an immediate map push — the removed entry is repointed
+    /// to f099 (burn address), every other share is left untouched. The bound aggregate is a binding
+    /// snapshot and must not drift, but the f02 map *does* change: the removed id's row becomes f099
+    /// (stored stripped of f099 rows, so its share leaves the stored map). Redistribution to survivors
+    /// is still deferred to the next SubmitShares.
     function test_Mirror_Remove_AfterBinding_KeepsSnapshot() public {
         address a = makeAddr("a");
         address b = makeAddr("b");
@@ -395,11 +400,19 @@ contract SRAggregateMirrorTest is SRATestBase {
         Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 2, "both contributors in the bound map");
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18, "bound aggregate");
+        uint256 aShare = _shareOf(shares, a);
+        uint256 bShare = _shareOf(shares, b);
+        assertGt(aShare, 0, "a holds a share");
+        assertGt(bShare, 0, "b holds a share");
 
         _remove(b, ""); // post-binding removal: aggregate is a binding snapshot, must not drift
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18, "bound aggregate unchanged after removal");
         shares = rewardActor().getShares(SERVICE_ID);
-        assertEq(shares.length, 2, "submitted map stands (removal does not rewrite a submitted map)");
+        // b's entry was repointed to f099 (stripped from storage): only a's share remains stored,
+        // at its unchanged value; b's slice is recorded as the stripped burn.
+        assertEq(shares.length, 1, "removed entry repointed to f099 leaves the stored map");
+        assertEq(_shareOf(shares, a), aShare, "survivor share untouched until next SubmitShares");
+        assertEq(rewardActor().strippedBurnOf(SERVICE_ID), bShare, "removed slice recorded as stripped f099 burn");
     }
 
     /// spec §3.2: the verification window also reverts — removal is deferred to after SubmitShares,
