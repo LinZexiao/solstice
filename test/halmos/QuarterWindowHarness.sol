@@ -27,9 +27,7 @@ contract QuarterWindowHarness is ServiceRewardsActor {
             Epoch.wrap(300), // postPeriod
             Epoch.wrap(400), // verificationWindow
             Epoch.wrap(100), // cancelHold
-            Epoch.wrap(100_000), // activationEpoch
-            1e18, // minLot
-            2000 // priceBand (20%, basis points)
+            Epoch.wrap(100_000) // activationEpoch
         )
     {}
 

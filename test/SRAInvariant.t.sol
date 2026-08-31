@@ -199,7 +199,7 @@ contract SRAInvariantHandler is SRATestBase {
 
     // Business operations (posting / verification / bound windows, explicit roll)
 
-    /// @notice An orchestrator posts a pure-stablecoin FilecoinPayVolume (no FIL periods, bypassing PRICE_BAND complexity).
+    /// @notice An orchestrator posts a pure-stablecoin FilecoinPayVolume (no FIL periods).
     function postVolume(uint256 q, uint256 orchIdx, uint256 usd) external {
         uint64 qq = uint64(bound(q, 0, MAX_Q));
         address orch = _pickOrch(orchIdx);
