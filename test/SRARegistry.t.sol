@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-// SRA registry tests — freeze semantics / cap rejection (D2)
+// SRA registry tests — cap rejection (D2)
 //
-//   - orchestrator admission/cap: 64-full rejection, Remove release, Freeze non-release (D2)
-//   - registerPairs: uniqueness, admission/freeze gating, re-claimable after Remove release
-//   - freeze/unfreeze: suspend/restore operation capability
+//   - orchestrator admission/cap: 64-full rejection, Remove release (D2)
+//   - registerPairs: uniqueness, admission gating, re-claimable after Remove release
 //   - replace: operator identity transfer; reassignBinding: binding reassignment
 
 import {SRATestBase} from "./SRATestBase.sol";
@@ -54,30 +53,6 @@ contract SRARegistryTest is SRATestBase {
         assertEq(sra.admittedCount(), 64);
     }
 
-    /// Strategy 5/D2: Freeze does not release a slot — the frozen orchestrator still occupies an admitted slot.
-    function test_Admit_FrozenStillCountsTowardLimit() public {
-        for (uint256 i = 0; i < 64; i++) {
-            _admit(makeAddr(string.concat("orch-", vm.toString(i))));
-        }
-        // freeze one orchestrator
-        address frozenOrch = makeAddr("orch-0");
-        _freeze(frozenOrch);
-        assertTrue(sra.isFrozen(frozenOrch));
-        // freeze does not release a slot: admittedCount is still 64
-        assertEq(sra.admittedCount(), 64);
-
-        // slot not released: a new admit is still rejected (after two votes queue, rejected at body execution once hold elapses)
-        address orch65 = makeAddr("orch-65");
-        vm.prank(owner1);
-        sra.admit(orch65);
-        vm.prank(owner2);
-        sra.admit(orch65); // second vote: completes the full vote queue (wait)
-
-        vm.roll(block.number + SRA_CANCEL_HOLD); // hold elapsed
-        vm.expectRevert();
-        sra.admit(orch65); // third permissionless call executes the body -> cap rejection
-    }
-
     // ------------------------------------------------------------------------
     // registerPairs (strategy 3)
     // ------------------------------------------------------------------------
@@ -102,20 +77,6 @@ contract SRARegistryTest is SRATestBase {
 
         vm.prank(stranger);
         vm.expectRevert();
-        sra.registerPairs(pairs);
-    }
-
-    /// a frozen orchestrator cannot registerPairs.
-    function test_RegisterPairs_Frozen_Reverts() public {
-        address orch = makeAddr("orch");
-        _admit(orch);
-        _freeze(orch);
-
-        Binding[] memory pairs = new Binding[](1);
-        pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
-
-        vm.prank(orch);
-        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.Frozen.selector, orch));
         sra.registerPairs(pairs);
     }
 
@@ -197,77 +158,6 @@ contract SRARegistryTest is SRATestBase {
         // original orchestrator removed; B can claim the same pair
         _registerPairsAs(orchB, pairs);
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchB);
-    }
-
-    // ------------------------------------------------------------------------
-    // freeze / unfreeze (strategy 3)
-    // ------------------------------------------------------------------------
-
-    /// a frozen orchestrator cannot postVolume (rejected even within the posting window).
-    function test_Freeze_PreventsPostVolume() public {
-        address orch = makeAddr("orch");
-        _admit(orch);
-        _freeze(orch);
-
-        vm.roll(_qEnd(0) + 1); // posting period
-        vm.prank(orch);
-        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.Frozen.selector, orch));
-        sra.postVolume(0, FixedU18.wrap(_fpv(100e18)));
-    }
-
-    /// correctVolume freeze symmetry: a frozen orchestrator cannot be re-admitted
-    /// into a quarter via the governance correctVolume path. Freeze suspends — the mirror advance
-    /// clears frozenAtPostEnd, so without this gate a freeze → correctVolume → advance sequence
-    /// would give a frozen orchestrator shares in the next quarter.
-    /// Unfreeze restores the governance correction path.
-    function test_CorrectVolume_Frozen_Reverts_UnfreezeRestores() public {
-        address a = makeAddr("a");
-        address b = makeAddr("b");
-        _admit(a);
-        _admit(b);
-
-        vm.roll(_qEnd(0) + 1); // posting
-        _postAs(a, 0, _fpv(100e18));
-        _postAs(b, 0, _fpv(200e18));
-        _freeze(b); // posting window: b excluded from q0 (frozenAtPostEnd)
-
-        // verification window: correcting a frozen orchestrator must revert Frozen —
-        // the governance path must not re-admit a suspended orchestrator (unanimousNoHold:
-        // vote 1 approves, vote 2 executes the body where the gate fires)
-        vm.roll(_qPostEnd(0) + 1);
-        vm.prank(owner1);
-        sra.correctVolume(b, 0, FixedU18.wrap(_fpv(150e18))); // vote 1 (approve only)
-        vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.Frozen.selector, b));
-        vm.prank(owner2);
-        sra.correctVolume(b, 0, FixedU18.wrap(_fpv(150e18))); // vote 2 executes body -> Frozen
-        assertEq(FixedU18.unwrap(sra.fpvOf(0, b).usd), 200e18, "frozen b's fpv untouched");
-
-        // unfreeze restores the governance correction path (fresh calldata -> fresh task)
-        _unfreeze(b);
-        _correctVolume(b, 0, _fpv(180e18));
-        assertEq(FixedU18.unwrap(sra.fpvOf(0, b).usd), 180e18, "corrected after unfreeze");
-    }
-
-    /// unfreeze restores operation capability (registerPairs / postVolume).
-    function test_Unfreeze_RestoresOperations() public {
-        address orch = makeAddr("orch");
-        _admit(orch);
-        _freeze(orch);
-
-        Binding[] memory pairs = new Binding[](1);
-        pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
-        vm.prank(orch);
-        vm.expectRevert();
-        sra.registerPairs(pairs);
-
-        _unfreeze(orch);
-        assertFalse(sra.isFrozen(orch));
-
-        _registerPairsAs(orch, pairs); // can register after restore
-        vm.roll(_qEnd(0) + 1);
-        _postAs(orch, 0, _fpv(100e18)); // can post after restore
-        FilecoinPayVolume memory f = sra.fpvOf(0, orch);
-        assertEq(FixedU18.unwrap(f.usd), 100e18);
     }
 
     // ------------------------------------------------------------------------
@@ -406,19 +296,6 @@ contract SRARegistryTest is SRATestBase {
         sra.remove(stranger);
     }
 
-    /// G6: a frozen orchestrator can be removed (the implementation does not block it; remove also clears frozen state and freeze history).
-    function test_Remove_FrozenOrch_Succeeds() public {
-        address orch = makeAddr("orch");
-        _admit(orch);
-        _freeze(orch);
-        assertTrue(sra.isFrozen(orch));
-
-        _remove(orch);
-        assertFalse(sra.isAdmitted(orch));
-        assertFalse(sra.isFrozen(orch));
-        assertEq(sra.admittedCount(), 0);
-    }
-
     // ------------------------------------------------------------------------
     // P2 coverage closure (CV4-CV7): governance failure branches + read-only view
     // ------------------------------------------------------------------------
@@ -437,65 +314,6 @@ contract SRARegistryTest is SRATestBase {
         vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectRevert(); // AlreadyAdmitted(orch)
         sra.admit(orch); // third permissionless body execution -> revert
-    }
-
-    /// Strategy 3/CV5: freeze on an unadmitted orchestrator -> NotAdmitted revert.
-    /// (The freeze success path is tested; the NotAdmitted failure branch was uncovered — coverage line 371)
-    function test_Freeze_NotAdmitted_Reverts() public {
-        address stranger = makeAddr("stranger");
-        vm.prank(owner1);
-        sra.freeze(stranger);
-        vm.prank(owner2);
-        sra.freeze(stranger);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        vm.expectRevert(); // NotAdmitted(stranger)
-        sra.freeze(stranger);
-    }
-
-    /// Strategy 3/CV5: freeze on an already-frozen orchestrator -> AlreadyFrozen revert.
-    /// (coverage line 372 revert branch uncovered)
-    function test_Freeze_AlreadyFrozen_Reverts() public {
-        address orch = makeAddr("orch");
-        _admit(orch);
-        _freeze(orch);
-        assertTrue(sra.isFrozen(orch));
-
-        vm.prank(owner1);
-        sra.freeze(orch);
-        vm.prank(owner2);
-        sra.freeze(orch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        vm.expectRevert(); // AlreadyFrozen(orch)
-        sra.freeze(orch);
-    }
-
-    /// Strategy 3/CV5: unfreeze on an unadmitted orchestrator -> NotAdmitted revert.
-    /// (coverage line 381 revert branch uncovered)
-    function test_Unfreeze_NotAdmitted_Reverts() public {
-        address stranger = makeAddr("stranger");
-        vm.prank(owner1);
-        sra.unfreeze(stranger);
-        vm.prank(owner2);
-        sra.unfreeze(stranger);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        vm.expectRevert(); // NotAdmitted(stranger)
-        sra.unfreeze(stranger);
-    }
-
-    /// Strategy 3/CV5: unfreeze on a non-frozen orchestrator -> NotFrozen revert.
-    /// (coverage line 382 revert branch uncovered)
-    function test_Unfreeze_NotFrozen_Reverts() public {
-        address orch = makeAddr("orch");
-        _admit(orch);
-        assertFalse(sra.isFrozen(orch));
-
-        vm.prank(owner1);
-        sra.unfreeze(orch);
-        vm.prank(owner2);
-        sra.unfreeze(orch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        vm.expectRevert(); // NotFrozen(orch)
-        sra.unfreeze(orch);
     }
 
     /// Strategy 3/CV6: replace with an unadmitted old address -> NotAdmitted(oldOrch) revert.
@@ -530,41 +348,6 @@ contract SRARegistryTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // re-admit = fresh identity (clears frozen/freeze history)
-    // ------------------------------------------------------------------------
-
-    /// Re-admit allocates a fresh identity: frozen state and freeze history are cleared, so a
-    /// re-admitted address operates as a normal orchestrator, not excluded by historical freezes.
-    function test_ReAdmit_ResetsFrozenState() public {
-        address oldOrch = makeAddr("readmit-frozen-old");
-        address newOrch = makeAddr("readmit-frozen-new");
-        _admit(oldOrch);
-        _freeze(oldOrch); // old frozen (frozenSince recorded)
-
-        // replace(old->new): the frozen state is copied wholesale with the struct to new (identity-transfer semantics)
-        vm.prank(owner1);
-        sra.replace(oldOrch, newOrch);
-        vm.prank(owner2);
-        sra.replace(oldOrch, newOrch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.replace(oldOrch, newOrch);
-        assertTrue(sra.isFrozen(newOrch), "new inherits frozen state from old");
-        assertTrue(sra.isAdmitted(newOrch));
-        assertFalse(sra.isAdmitted(oldOrch)); // old invalidated (alias)
-
-        // re-admit old: fresh identity (clears frozen state)
-        _admit(oldOrch);
-        assertTrue(sra.isAdmitted(oldOrch));
-        assertFalse(sra.isFrozen(oldOrch), "re-admit must reset frozen state");
-
-        // after re-admission old operates as a normal orchestrator (postVolume not excluded by freeze history)
-        vm.roll(_qEnd(1) + 1); // quarter 1 posting window
-        _postAs(oldOrch, 1, _fpv(100e18)); // not reverting proves normal operation
-        FilecoinPayVolume memory f = sra.fpvOf(1, oldOrch);
-        assertEq(FixedU18.unwrap(f.usd), 100e18);
-    }
-
-    // ------------------------------------------------------------------------
     // id-keyed identity: re-admit = fresh id (structural, not a cleanup step)
     // ------------------------------------------------------------------------
 
@@ -591,7 +374,6 @@ contract SRARegistryTest is SRATestBase {
         // re-admit the same address: fresh identity
         _admit(oldOrch);
         assertTrue(sra.isAdmitted(oldOrch));
-        assertFalse(sra.isFrozen(oldOrch));
 
         // the removed identity's binding does not carry over: the pair is claimable by a third party
         _registerPairsAs(third, pairs); // no revert -> the old id's binding is not inherited

@@ -13,9 +13,8 @@ import {QuarterWindowHarness} from "./QuarterWindowHarness.sol";
 ///      **parameter-independent properties** (mathematical properties holding under any window parameters).
 ///      Halmos 0.1.13 limits: vm.warp does not work on symbolic parameters, so block.number cannot be
 ///      symbolized — window determination relying on currentEpoch() is covered by dynamic tests instead
-///      (SRAQuarter.t.sol window-boundary cases, SRARegistry freeze/unfreeze in both directions, and the
-///      invariant suite's random freeze-history exclusion); storage array element reads after push return
-///      symbolic elements, so freeze-history interval search is also dynamic-test-covered.
+///      (SRAQuarter.t.sol window-boundary cases); storage array element reads after push return
+///      symbolic elements, so array-backed dynamic behavior is also dynamic-test-covered.
 contract QuarterWindowCheck is QuarterWindowHarness, Test {
     // forge-lint: disable-start(mixed-case-function) — halmos runs only check_-prefixed property functions (tool convention)
     /// @dev owner params arbitrary (halmos executes with --no-test-constructor, skipping the constructor; the compiler layer still needs explicit args).

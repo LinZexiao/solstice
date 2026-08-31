@@ -33,8 +33,6 @@ contract SRATestBase is MockRewardTest {
     // ---- small test window constants (constructor config) ----
     // quarter 1000 epochs, posting 300, verification 400, hold 100; ACTIVATION = 100000
     // keeps quarter 0's windows far from the "SWA_TIMELOCK(20160) advance required to register stream 2".
-    // POST_PERIOD(300) > 2×SRA_CANCEL_HOLD(200): guarantees two consecutive freezes within the posting
-    // period (each 2 votes + 100 hold) complete before E+POST (the timing prerequisite for all-frozen -> burn).
     uint64 internal constant EPOCHS_PER_QUARTER = 1000;
     uint64 internal constant POST_PERIOD = 300;
     uint64 internal constant VERIFICATION_WINDOW = 400;
@@ -142,24 +140,6 @@ contract SRATestBase is MockRewardTest {
         sra.admit(orch);
         vm.roll(block.number + SRA_CANCEL_HOLD);
         sra.admit(orch); // third call (permissionless) completes execution
-    }
-
-    function _freeze(address orch) internal {
-        vm.prank(owner1);
-        sra.freeze(orch);
-        vm.prank(owner2);
-        sra.freeze(orch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.freeze(orch);
-    }
-
-    function _unfreeze(address orch) internal {
-        vm.prank(owner1);
-        sra.unfreeze(orch);
-        vm.prank(owner2);
-        sra.unfreeze(orch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.unfreeze(orch);
     }
 
     function _remove(address orch) internal {
