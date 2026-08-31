@@ -34,8 +34,8 @@ contract SRAOverflowDoS is SRATestBase {
     function test_V3_HugeUsd_SystemStaysOperational() public {
         address attacker = makeAddr("v3-attacker");
         address victim = makeAddr("v3-victim");
-        _admit(attacker);
-        _admit(victim);
+        _admit(attacker, attacker);
+        _admit(victim, victim);
 
         vm.roll(_qEnd(0) + 1);
         vm.prank(attacker);
@@ -55,7 +55,7 @@ contract SRAOverflowDoS is SRATestBase {
     /// (expected fix: business-domain upper bound MAX_FILECOIN_PAY_VOLUME_USD on the single USD total).
     function test_V3_HugeUsd_RejectedByPostVolume() public {
         address attacker = makeAddr("v3-reject");
-        _admit(attacker);
+        _admit(attacker, attacker);
 
         vm.roll(_qEnd(0) + 1);
         vm.prank(attacker);

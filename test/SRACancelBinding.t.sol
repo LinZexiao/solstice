@@ -46,7 +46,7 @@ contract SRACancelBindingTest is SRATestBase {
     /// a live binding is released: after governance cancel, bindingOf returns address(0) (unclaimed).
     function test_CancelBinding_Success_UnbindsPair() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         address payer = makeAddr("payer");
         address operator = makeAddr("operator");
@@ -65,8 +65,8 @@ contract SRACancelBindingTest is SRATestBase {
     function test_CancelBinding_PairReclaimable_ByOtherOrch() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
-        _admit(orchA);
-        _admit(orchB);
+        _admit(orchA, orchA);
+        _admit(orchB, orchB);
 
         address payer = makeAddr("payer");
         address operator = makeAddr("operator");
@@ -84,7 +84,7 @@ contract SRACancelBindingTest is SRATestBase {
     /// the release emits BindingCanceled(payer, operator, releasedOrchestrator) at the execution call.
     function test_CancelBinding_EmitsBindingCanceled() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         address payer = makeAddr("payer");
         address operator = makeAddr("operator");
@@ -125,7 +125,7 @@ contract SRACancelBindingTest is SRATestBase {
     /// PairNotBound — releasing an already-unclaimed pair is a no-op and is rejected.
     function test_CancelBinding_DoubleCancel_Reverts() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         address payer = makeAddr("payer");
         address operator = makeAddr("operator");
@@ -150,15 +150,16 @@ contract SRACancelBindingTest is SRATestBase {
     function test_CancelBinding_RemovedOrch_Reverts() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
-        _admit(orchA);
-        _admit(orchB);
+        _admit(orchA, orchA);
+        _admit(orchB, orchB);
 
         address payer = makeAddr("payer");
         address operator = makeAddr("operator");
         Binding[] memory pairs = new Binding[](1);
         pairs[0] = _pair(payer, operator);
         _registerPairsAs(orchA, pairs);
-        _remove(orchA); // binding stays in storage but reads as unclaimed (spec §4.2)
+        _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
+        _remove(orchA, ""); // binding stays in storage but reads as unclaimed (spec §4.2)
 
         bytes32 pairId = _pairId(payer, operator);
         vm.prank(owner1);
