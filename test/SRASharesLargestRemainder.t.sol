@@ -27,7 +27,6 @@ contract SRASharesLargestRemainderTest is SRATestBase {
             EPOCHS_PER_QUARTER,
             POST_PERIOD,
             VERIFICATION_WINDOW,
-            SRA_CANCEL_HOLD,
             ACTIVATION_EPOCH,
             MIN_LOT,
             PRICE_BAND

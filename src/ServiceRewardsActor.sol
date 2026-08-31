@@ -49,7 +49,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     Epoch public immutable EPOCHS_PER_QUARTER;
     Epoch private immutable POST_PERIOD;
     Epoch private immutable VERIFICATION_WINDOW;
-    Epoch private immutable SRA_CANCEL_HOLD;
     Epoch private immutable ACTIVATION_EPOCH;
 
     event OrchestratorAdmitted(address indexed orch, address wallet);
@@ -59,6 +58,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     event BindingReassigned(
         address indexed payer, address indexed operator, address indexed orchestrator, bool inherit
     );
+    event BindingCanceled(address indexed payer, address indexed operator, address indexed orchestrator);
     event OwnersReplaced(address indexed prevOwner, address indexed newOwner);
     event AdmittedListsUpdated(address[] stablecoins, address[] filecoinPayContracts);
     event PricingParamsUpdated(uint256 minLot, uint256 priceBand);
@@ -70,6 +70,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     error AlreadyAdmitted(address orch);
     error AtCapacity();
     error AlreadyBound(bytes32 pairId);
+    error PairNotBound(bytes32 pairId);
     error NotInPostingWindow(uint64 q);
     error NotInVerificationWindow(uint64 q);
     error NotBound(uint64 q);
@@ -84,7 +85,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @param epochsPerQuarter quarter length (epochs)
     /// @param postPeriod posting window (epochs)
     /// @param verificationWindow verification window (epochs)
-    /// @param cancelHold governance hold (epochs)
     /// @param activationEpoch end epoch of quarter 0 (window start)
     /// @param minLot,priceBand initial FIL pricing parameters (governable; authoritative for the off-chain indexer, FIPs#1275)
     constructor(
@@ -93,7 +93,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         Epoch epochsPerQuarter,
         Epoch postPeriod,
         Epoch verificationWindow,
-        Epoch cancelHold,
         Epoch activationEpoch,
         uint256 minLot,
         uint256 priceBand
@@ -112,7 +111,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         EPOCHS_PER_QUARTER = epochsPerQuarter;
         POST_PERIOD = postPeriod;
         VERIFICATION_WINDOW = verificationWindow;
-        SRA_CANCEL_HOLD = cancelHold;
         ACTIVATION_EPOCH = activationEpoch;
 
         SraStorage.SraStorageParams storage p = SraStorage.params();
@@ -370,6 +368,24 @@ contract ServiceRewardsActor is UnanimousGovernance {
         emit BindingReassigned(payer, operator, orch, inherit);
     }
 
+    /// @notice Governance release of a single binding: the pair returns to unclaimed and becomes claimable again.
+    /// @dev Guard is the exact mirror of registerPairs's AlreadyBound check — only a live binding (boundId != 0
+    ///      and still admitted) can be canceled; a removed orchestrator's binding already reads as unclaimed
+    ///      under registerPairs semantics (spec §4.2), so canceling it is a no-op and reverts PairNotBound.
+    ///      Claim and cancel stay mutually exclusive: registerPairs claims exactly when cancel reverts, and vice versa.
+    /// @dev The released orchestrator is carried in the event (three indexed args like BindingDeclared/
+    ///      BindingReassigned): after the delete, bindingOf returns 0, so without the orchestrator field an
+    ///      off-chain indexer could not tell who lost the binding.
+    function cancelBinding(address payer, address operator) external unanimousNoHold(keccak256(msg.data)) {
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
+        bytes32 pairId = _pairId(payer, operator);
+        uint64 boundId = r.bindings[pairId];
+        require(boundId != 0 && r.orchestrators[boundId].admitted, PairNotBound(pairId));
+        address orch = r.orchestrators[boundId].wallet;
+        delete r.bindings[pairId];
+        emit BindingCanceled(payer, operator, orch);
+    }
+
     /// @notice Owner rotation, effective immediately (unanimousNoHold path,
     ///         aligned with upstream SWA's replaceOwner).
     function replaceOwner(address prevOwner, address newOwner) external unanimousNoHold(keccak256(msg.data)) {
@@ -414,8 +430,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // ------------------------------------------------------------------------
 
     /// @notice Only within the verification window, dual-Safe joint; replaces the posted value with the recomputed figure,
-    ///         or supplies the recomputed figure for an unposted orchestrator; exempt from SRA_CANCEL_HOLD (spec §4.2
-    ///         window-is-hold), allows bidirectional correction. Value is a single USD total (FIP-0118 FIPs#1275).
+    ///         or supplies the recomputed figure for an unposted orchestrator; effective immediately — the verification
+    ///         window itself is the hold (spec §4.2), allows bidirectional correction. Value is a single USD total (FIP-0118 FIPs#1275).
     /// @dev The unanimousNoHold modifier handles dual-Safe owner validation; the function body validates the verification window.
     function correctVolume(address orch, uint64 q, FixedU18 value) external unanimousNoHold(keccak256(msg.data)) {
         require(_inVerificationWindow(q), NotInVerificationWindow(q));
