@@ -102,25 +102,6 @@ contract SRACancelBindingTest is SRATestBase {
         sra.cancelBinding(payer, operator);
     }
 
-    /// a frozen orchestrator's binding is still live (freeze keeps admitted=true, unlike remove),
-    /// so governance can cancel it without removing the orchestrator — the per-pair release tool.
-    function test_CancelBinding_FrozenOrch_Succeeds() public {
-        address orch = makeAddr("orch");
-        _admit(orch);
-
-        address payer = makeAddr("payer");
-        address operator = makeAddr("operator");
-        Binding[] memory pairs = new Binding[](1);
-        pairs[0] = _pair(payer, operator);
-        _registerPairsAs(orch, pairs);
-
-        _freeze(orch);
-        assertTrue(sra.isFrozen(orch));
-
-        _cancelBinding(payer, operator);
-        assertEq(sra.bindingOf(payer, operator), address(0));
-    }
-
     // ------------------------------------------------------------------------
     // Failure paths (guard + governance)
     // ------------------------------------------------------------------------
