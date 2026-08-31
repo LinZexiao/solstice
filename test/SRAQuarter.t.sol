@@ -24,7 +24,7 @@ contract SRAQuarterTest is SRATestBase {
     /// posting within the window (E < now <= E+POST) succeeds.
     function test_PostVolume_PostingWindow_Success() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1); // E+1
         _postAs(orch, 0, _fpv(100e18));
@@ -35,7 +35,7 @@ contract SRAQuarterTest is SRATestBase {
     /// E itself is not in the posting window (E < now, strictly less).
     function test_PostVolume_AtQuarterEnd_Reverts() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0)); // now == E: posting not yet open
         vm.prank(orch);
@@ -46,7 +46,7 @@ contract SRAQuarterTest is SRATestBase {
     /// the posting window's right boundary is inclusive of E+POST (<=).
     function test_PostVolume_AtPostEnd_Inclusive() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qPostEnd(0)); // now == E+POST: allowed
         _postAs(orch, 0, _fpv(100e18));
@@ -56,7 +56,7 @@ contract SRAQuarterTest is SRATestBase {
     /// E+POST+1 enters verification; posting is rejected.
     function test_PostVolume_AfterPostingWindow_Reverts() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(orch);
@@ -67,7 +67,7 @@ contract SRAQuarterTest is SRATestBase {
     /// at most once per quarter — the second posting reverts (posted flag).
     function test_PostVolume_SecondPosting_Reverts() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
@@ -81,7 +81,7 @@ contract SRAQuarterTest is SRATestBase {
     ///     `usd == 0` unambiguously means "not posted" (postVolume requires > 0).
     function test_PostVolume_Zero_Reverts() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         vm.prank(orch);
@@ -93,7 +93,7 @@ contract SRAQuarterTest is SRATestBase {
     ///     the orchestrator is excluded from the aggregate.
     function test_CorrectVolume_Zero_Clears() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
@@ -113,7 +113,7 @@ contract SRAQuarterTest is SRATestBase {
     /// an upward correction within the verification window succeeds.
     function test_CorrectVolume_VerificationWindow_Upward() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
@@ -126,7 +126,7 @@ contract SRAQuarterTest is SRATestBase {
     /// bidirectional correction — downward succeeds.
     function test_CorrectVolume_Downward_Corrects() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
@@ -139,7 +139,7 @@ contract SRAQuarterTest is SRATestBase {
     /// multiple corrections within the window; the last one wins (whole replacement).
     function test_CorrectVolume_MultipleCorrections_LastWins() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
@@ -153,7 +153,7 @@ contract SRAQuarterTest is SRATestBase {
     /// an unposted orchestrator can be backfilled within the verification window (posted=false -> written).
     function test_CorrectVolume_BackfillUnposted() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qPostEnd(0) + 1); // unposted, straight into verification
         _correctVolume(orch, 0, _fpv(150e18));
@@ -163,7 +163,7 @@ contract SRAQuarterTest is SRATestBase {
     /// the verification window's right boundary is inclusive of E+POST+VERIFY.
     function test_CorrectVolume_AtVerifyEnd_Inclusive() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1); // E+1: post within the posting window (E, E+POST]
         _postAs(orch, 0, _fpv(100e18));
@@ -176,7 +176,7 @@ contract SRAQuarterTest is SRATestBase {
     /// after the window closes (E+POST+VERIFY+1) CorrectVolume is rejected (value bound).
     function test_CorrectVolume_AfterVerificationWindow_Reverts() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
@@ -196,7 +196,7 @@ contract SRAQuarterTest is SRATestBase {
     /// aggregatedFilecoinPayVolume reverts NotBound before the window closes (distinguishable from zero declared volume).
     function test_AggregatedFilecoinPayVolume_BeforeBinding_RevertsNotBound() public {
         address orch = makeAddr("orch");
-        _admit(orch);
+        _admit(orch, orch);
         vm.roll(_qEnd(0) + 1);
         _postAs(orch, 0, _fpv(100e18));
 
@@ -212,8 +212,8 @@ contract SRAQuarterTest is SRATestBase {
     function test_AggregatedFilecoinPayVolume_AfterBinding_SumOfValues() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB");
-        _admit(orchA);
-        _admit(orchB);
+        _admit(orchA, orchA);
+        _admit(orchB, orchB);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orchA, 0, _fpv(100e18));
@@ -227,8 +227,8 @@ contract SRAQuarterTest is SRATestBase {
     function test_AggregatedFilecoinPayVolume_UnpostedOrch_Excluded() public {
         address orchA = makeAddr("orchA");
         address orchB = makeAddr("orchB"); // B admitted but does not post
-        _admit(orchA);
-        _admit(orchB);
+        _admit(orchA, orchA);
+        _admit(orchB, orchB);
 
         vm.roll(_qEnd(0) + 1);
         _postAs(orchA, 0, _fpv(100e18));

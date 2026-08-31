@@ -130,14 +130,12 @@ contract DifferentialSharesTest is SRATestBase {
         );
     }
 
-    /// @dev Runs the governance three-phase admit on the given SRA instance (the base _admit always operates on the sra instance).
+    /// @dev Runs the governance two-vote admit on the given SRA instance (the base _admit always operates on the sra instance).
     function _admitOn(ServiceRewardsActor s, address orch) internal {
         vm.prank(owner1);
-        s.admit(orch);
+        s.addOrchestrator(orch, orch);
         vm.prank(owner2);
-        s.admit(orch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        s.admit(orch); // third call (permissionless) completes execution
+        s.addOrchestrator(orch, orch); // second vote executes (unanimousNoHold)
     }
 
     function _msg(string memory kind, uint256 i, string memory what) internal pure returns (string memory) {

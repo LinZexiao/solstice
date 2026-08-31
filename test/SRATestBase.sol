@@ -115,25 +115,31 @@ contract SRATestBase is MockRewardTest {
     }
 
     // ------------------------------------------------------------------------
-    // Governance operation helpers: two votes (unanimous + hold) -> roll past hold -> permissionless completion
+    // Governance operation helpers: two votes (unanimousNoHold) — the second vote executes
     // ------------------------------------------------------------------------
 
-    function _admit(address orch) internal {
+    /// @notice addOrchestrator uses unanimousNoHold: the second vote executes, no roll needed.
+    function _admit(address orch, address wallet) internal {
         vm.prank(owner1);
-        sra.admit(orch);
+        sra.addOrchestrator(orch, wallet);
         vm.prank(owner2);
-        sra.admit(orch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.admit(orch); // third call (permissionless) completes execution
+        sra.addOrchestrator(orch, wallet);
     }
 
-    function _remove(address orch) internal {
+    /// @notice removeOrchestrator uses unanimousNoHold: the second vote executes, no roll needed.
+    function _remove(address orch, string memory reason) internal {
         vm.prank(owner1);
-        sra.remove(orch);
+        sra.removeOrchestrator(orch, reason);
         vm.prank(owner2);
-        sra.remove(orch);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.remove(orch);
+        sra.removeOrchestrator(orch, reason);
+    }
+
+    /// @dev Binds and submits quarter 0 to lift the spec §3.2 remove guard in tests that exercise
+    ///      removal semantics (slot/index/release) without caring about quarter timing.
+    ///      submitShares(0) is a no-op when quarter 0 has no volume; nextQuarter advances to 1.
+    function _crankQuarter0() internal {
+        vm.roll(_qVerifyEnd(0) + 1); // q0 binds
+        sra.submitShares(0);
     }
 
     /// @notice correctVolume uses unanimousNoHold: the second vote executes, no roll needed.
