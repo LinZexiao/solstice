@@ -3,8 +3,8 @@ pragma solidity ^0.8.36;
 
 // SRA quarter state machine + FilecoinPayVolume + FIL pricing tests
 //   window boundaries / CorrectVolume / AggregatedFilecoinPayVolume
-//   FIP-0118 (FIPs#1275): FilecoinPayVolume is a single USD total — PRICE_BAND / FinalizeConversion
-//   tests are obsolete after FIPs#1275 (off-chain conversion).
+//   FIP-0118 (FIPs#1275): FilecoinPayVolume is a single USD total — the
+//   on-chain conversion machinery is obsolete after FIPs#1275 (off-chain conversion).
 //
 // Time model: Epoch = block.number; windows:
 //   posting:      E < now <= E+POST
@@ -13,6 +13,7 @@ pragma solidity ^0.8.36;
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
+import {Vm} from "forge-std/Vm.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {FilecoinPayVolume} from "../src/lib/SraTypes.sol";
 
@@ -251,23 +252,36 @@ contract SRAQuarterTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // G1: setPricingParams / getPricingParams
-    //   Governance: unanimous + hold (two votes + permissionless body execution after hold elapses)
-    //   FIPs#1275: MIN_LOT/PRICE_BAND are authoritative for the off-chain indexer, not an on-chain computation
+    // G1: setPricingParams (event-only, binds at once)
+    //   FIPs#1277 (spec §2.3): MIN_LOT_FLOOR / MIN_LOT_ALPHA (rational num/den) / PRICE_BAND
+    //   are authoritative for the off-chain indexer, not stored on-chain — the call's
+    //   only effect is the PricingParamsUpdated event.
     // ------------------------------------------------------------------------
 
-    /// G1: governance updates the params minLot/priceBand; getPricingParams returns the new values.
-    function test_SetPricingParams_UpdatesParams_GetReturns() public {
+    /// G1: governance updates the params; the event carries the new values (stores nothing).
+    ///     The unanimousNoHold modifier also emits Submitted/Approved (vote records), so the
+    ///     parameter event is extracted from the recorded logs rather than expectEmit.
+    function test_SetPricingParams_UpdatesParams_EmitsEvent() public {
+        vm.recordLogs();
         vm.prank(owner1);
-        sra.setPricingParams(2e18, 1500);
+        sra.setPricingParams(2e18, 1, 400, 1500);
         vm.prank(owner2);
-        sra.setPricingParams(2e18, 1500);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        sra.setPricingParams(2e18, 1500); // third call: permissionless execution
+        sra.setPricingParams(2e18, 1, 400, 1500); // second vote executes (unanimousNoHold)
 
-        (uint256 minLot, uint256 priceBand) = sra.getPricingParams();
-        assertEq(minLot, 2e18);
-        assertEq(priceBand, 1500); // 15%
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        bytes32 topic = ServiceRewardsActor.PricingParamsUpdated.selector;
+        uint256 hits;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] != topic) continue;
+            hits++;
+            (uint256 f, uint256 an, uint256 ad, uint256 b) =
+                abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
+            assertEq(f, 2e18);
+            assertEq(an, 1);
+            assertEq(ad, 400);
+            assertEq(b, 1500); // 15%
+        }
+        assertEq(hits, 1, "PricingParamsUpdated emitted once");
     }
 
     /// G1: a non-owner (third party) calling setPricingParams -> rejected on the first vote (NotOwner).
@@ -275,19 +289,17 @@ contract SRAQuarterTest is SRATestBase {
         address stranger = makeAddr("stranger");
         vm.prank(stranger);
         vm.expectRevert();
-        sra.setPricingParams(2e18, 1500);
+        sra.setPricingParams(2e18, 1, 400, 1500);
     }
 
-    /// G1: invalid params (priceBand > 10000) -> InvalidParameter at the third body execution.
+    /// G1: invalid params (band > 10000) -> InvalidParameter at the second vote (bind-at-once).
     function test_SetPricingParams_InvalidParams_Reverts() public {
-        // priceBand > BASIS_POINTS(10000) is invalid
+        // band > BASIS_POINTS(10000) is invalid
         vm.prank(owner1);
-        sra.setPricingParams(MIN_LOT, 10001);
+        sra.setPricingParams(2e18, 1, 400, 10001);
         vm.prank(owner2);
-        sra.setPricingParams(MIN_LOT, 10001);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectRevert();
-        sra.setPricingParams(MIN_LOT, 10001);
+        sra.setPricingParams(2e18, 1, 400, 10001);
     }
 
     // ------------------------------------------------------------------------

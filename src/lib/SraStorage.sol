@@ -29,17 +29,9 @@ library SraStorage {
         mapping(uint64 quarter => FixedU18) totalUsd;
     }
 
-    /// @custom:storage-location erc7201:Solstice.SRA.Params
-    /// @dev governs the off-chain USD conversion
-    struct SraStorageParams {
-        uint256 minLot; // FIP §2.3
-        uint256 priceBand; // basis points
-    }
-
     // keccak256(abi.encode(uint256(keccak256(namespace)) - 1)) & ~bytes32(uint256(0xff)) — precomputed and hardcoded
     bytes32 internal constant REGISTRY_SLOT = 0xb7fd4b054ced95f43476af93bf71636318271f9e64f7661dc52f0fb4c1a54400;
     bytes32 internal constant QUARTER_SLOT = 0x347e624280399e1e720d839edbd7cd00c80c69bf34cd8ee59e27f691732af300;
-    bytes32 internal constant PARAMS_SLOT = 0xe21afbd697880784c3da970abdca3a316f22b4c4fc74f2fceb073d8e55bcad00;
 
     function registry() internal pure returns (SraStorageRegistry storage r) {
         assembly ("memory-safe") {
@@ -50,12 +42,6 @@ library SraStorage {
     function quarter() internal pure returns (SraStorageQuarter storage q) {
         assembly ("memory-safe") {
             q.slot := QUARTER_SLOT
-        }
-    }
-
-    function params() internal pure returns (SraStorageParams storage p) {
-        assembly ("memory-safe") {
-            p.slot := PARAMS_SLOT
         }
     }
 }

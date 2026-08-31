@@ -5,8 +5,7 @@ pragma solidity ^0.8.36;
 // the FilecoinPayVolume input fields had no business-domain upper-bound validation.
 //
 //   Anchor pollution → network-wide permanent DoS: obsolete after FIPs#1275
-//        (the PRICE_BAND anchor/_checkPriceBand are gone — FIL→USD conversion is
-//        off-chain, so no on-chain band arithmetic exists).
+//        (the FIL→USD conversion is off-chain, so no on-chain band arithmetic exists).
 //   finalizeConversion overflow → quarterly settlement stuck: obsolete after
 //        FIPs#1275 (no on-chain FIL→USD conversion; _finalizeConversion removed).
 //   Huge USD total → _computeShares overflow → quarterly settlement stuck:
