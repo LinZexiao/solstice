@@ -19,14 +19,15 @@ import {Epoch} from "../../src/lib/Epoch.sol";
 ///      The E+POST snapshot is fixed into the mirror at the advance (prevFpv) — there is no
 ///      per-epoch interval-search function to verify; the E+POST semantics is covered by dynamic tests.
 contract QuarterWindowHarness is ServiceRewardsActor {
-    constructor(address owner1, address owner2)
+    constructor(address owner1, address owner2, uint64 sraUpgradeHold)
         ServiceRewardsActor(
             owner1,
             owner2,
             Epoch.wrap(1000), // epochsPerQuarter
             Epoch.wrap(300), // postPeriod
             Epoch.wrap(400), // verificationWindow
-            Epoch.wrap(100_000) // activationEpoch
+            Epoch.wrap(100_000), // activationEpoch
+            Epoch.wrap(sraUpgradeHold)
         )
     {}
 

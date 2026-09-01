@@ -116,7 +116,8 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(1 << 40), // EPOCHS_PER_QUARTER: uint64.max × 2^40 ≈ 2^104 > 2^64
             Epoch.wrap(POST_PERIOD),
             Epoch.wrap(VERIFICATION_WINDOW),
-            Epoch.wrap(ACTIVATION_EPOCH)
+            Epoch.wrap(ACTIVATION_EPOCH),
+            Epoch.wrap(SRA_UPGRADE_HOLD)
         );
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
         big.qEnd(type(uint64).max);
@@ -204,7 +205,8 @@ contract SRAAdversarial is SRATestBase {
     // ------------------------------------------------------------------------
     // 4. setPricingParams parameter grid (stores nothing — event-only)
     //    FIPs#1277 (spec §2.3): MIN_LOT_FLOOR (atto-USD), MIN_LOT_ALPHA
-    //    (rational, numerator + denominator), PRICE_BAND (basis points).
+    //    (rational, numerator + denominator), PRICE_BAND (basis points), and
+    //    REGISTRATION_CUTOFF (spec 8e495ca: duration in epochs, off-chain late-claim guard).
     //    Binds at once (unanimousNoHold — the second vote executes the call).
     // ------------------------------------------------------------------------
 
@@ -212,12 +214,14 @@ contract SRAAdversarial is SRATestBase {
     ///      asserts the PricingParamsUpdated event carries exactly the given values. The
     ///      unanimousNoHold modifier also emits Submitted/Approved (governance vote records), so
     ///      the parameter event is extracted from the recorded logs rather than expectEmit.
-    function _setPricingParams(uint256 floor, uint256 alphaNum, uint256 alphaDen, uint256 band) internal {
+    function _setPricingParams(uint256 floor, uint256 alphaNum, uint256 alphaDen, uint256 band, uint256 cutoff)
+        internal
+    {
         vm.recordLogs();
         vm.prank(owner1);
-        sra.setPricingParams(floor, alphaNum, alphaDen, band);
+        sra.setPricingParams(floor, alphaNum, alphaDen, band, cutoff);
         vm.prank(owner2);
-        sra.setPricingParams(floor, alphaNum, alphaDen, band);
+        sra.setPricingParams(floor, alphaNum, alphaDen, band, cutoff);
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = ServiceRewardsActor.PricingParamsUpdated.selector;
@@ -225,52 +229,53 @@ contract SRAAdversarial is SRATestBase {
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] != topic) continue;
             hits++;
-            (uint256 f, uint256 an, uint256 ad, uint256 b) =
-                abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
+            (uint256 f, uint256 an, uint256 ad, uint256 b, uint256 c) =
+                abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, uint256));
             assertEq(f, floor);
             assertEq(an, alphaNum);
             assertEq(ad, alphaDen);
             assertEq(b, band);
+            assertEq(c, cutoff);
         }
         assertEq(hits, 1, "PricingParamsUpdated emitted once");
     }
 
     /// band = 0 (tightest band) is a valid parameter — accepted.
     function test_SetPricingParams_BandZero_Accepted() public {
-        _setPricingParams(5e17, 1, 400, 0);
+        _setPricingParams(5e17, 1, 400, 0, 20160);
     }
 
     /// band = BASIS_POINTS (100%) is a valid parameter — accepted.
     function test_SetPricingParams_BandFull_Accepted() public {
-        _setPricingParams(5e17, 1, 400, 10_000);
+        _setPricingParams(5e17, 1, 400, 10_000, 20160);
     }
 
     /// band > BASIS_POINTS (10000) is rejected with InvalidParameter.
     function test_SetPricingParams_BandOverMax_Rejected() public {
         vm.prank(owner1);
-        sra.setPricingParams(5e17, 1, 400, 10_001);
+        sra.setPricingParams(5e17, 1, 400, 10_001, 20160);
         vm.prank(owner2);
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
-        sra.setPricingParams(5e17, 1, 400, 10_001);
+        sra.setPricingParams(5e17, 1, 400, 10_001, 20160);
     }
 
     /// alphaDen = 0 (undefined rational) is rejected with InvalidParameter.
     function test_SetPricingParams_AlphaDenZero_Rejected() public {
         vm.prank(owner1);
-        sra.setPricingParams(5e17, 1, 0, 3000);
+        sra.setPricingParams(5e17, 1, 0, 3000, 20160);
         vm.prank(owner2);
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
-        sra.setPricingParams(5e17, 1, 0, 3000);
+        sra.setPricingParams(5e17, 1, 0, 3000, 20160);
     }
 
     /// floor = 1e30 (large) is accepted (governance-trusted parameter for the off-chain indexer).
     function test_SetPricingParams_FloorLarge_Accepted() public {
-        _setPricingParams(1e30, 1, 400, 3000);
+        _setPricingParams(1e30, 1, 400, 3000, 20160);
     }
 
     /// floor = 0 (no floor) is accepted.
     function test_SetPricingParams_FloorZero_Accepted() public {
-        _setPricingParams(0, 1, 400, 3000);
+        _setPricingParams(0, 1, 400, 3000, 20160);
     }
 
     // ------------------------------------------------------------------------
@@ -362,7 +367,8 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(500), // EPOCHS
             Epoch.wrap(300), // POST
             Epoch.wrap(400), // VERIFY: 300 + 400 = 700 > 500 -> overlap
-            Epoch.wrap(ACTIVATION_EPOCH)
+            Epoch.wrap(ACTIVATION_EPOCH),
+            Epoch.wrap(SRA_UPGRADE_HOLD)
         );
     }
 
@@ -377,7 +383,8 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(type(uint64).max), // EPOCHS: 2^64 - 1
             Epoch.wrap(uint64(2 ** 63)), // POST
             Epoch.wrap(uint64(2 ** 63)), // VERIFY: uint64 sum wraps to 0; uint256 sum = 2^64 > EPOCHS -> rejected
-            Epoch.wrap(ACTIVATION_EPOCH)
+            Epoch.wrap(ACTIVATION_EPOCH),
+            Epoch.wrap(SRA_UPGRADE_HOLD)
         );
     }
 
@@ -392,7 +399,8 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(700), // EPOCHS
             Epoch.wrap(300), // POST
             Epoch.wrap(400), // VERIFY: 300 + 400 = 700 == EPOCHS -> rejected (strict)
-            Epoch.wrap(ACTIVATION_EPOCH)
+            Epoch.wrap(ACTIVATION_EPOCH),
+            Epoch.wrap(SRA_UPGRADE_HOLD)
         );
     }
 

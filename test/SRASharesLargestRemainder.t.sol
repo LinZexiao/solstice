@@ -22,7 +22,7 @@ contract SRASharesLargestRemainderTest is SRATestBase {
     function setUp() public virtual override {
         super.setUp();
         harness = new DifferentialSharesHarness(
-            owner1, owner2, EPOCHS_PER_QUARTER, POST_PERIOD, VERIFICATION_WINDOW, ACTIVATION_EPOCH
+            owner1, owner2, EPOCHS_PER_QUARTER, POST_PERIOD, VERIFICATION_WINDOW, ACTIVATION_EPOCH, SRA_UPGRADE_HOLD
         );
     }
 
