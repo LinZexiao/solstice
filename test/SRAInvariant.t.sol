@@ -403,7 +403,7 @@ contract SRAInvariantHandler is SRATestBase {
     }
 
     /// @dev Reads the PendingTask approved bitmask (PendingTask{modified:Epoch, approvals:uint160} packed into one slot;
-    ///      Epoch is uint64 post-8c3eff9, so approvals sits at bit offset 64).
+    ///      Epoch is uint64, so approvals sits at bit offset 64).
     function approvalsOf(bytes32 taskId) external view returns (uint160) {
         bytes32 slot = keccak256(abi.encode(taskId, PENDING_TASKS_SLOT));
         return uint160(uint256(vm.load(address(sra), slot)) >> 64);
@@ -495,7 +495,7 @@ contract SRAInvariantTest is Test {
         targetContract(address(handler));
         // explicitly limit the handler's operation function set — excluding setUp() (public; otherwise the fuzzer would
         // treat it as a target and randomly call it, resetting the sra instance and diverging the handler's expected state
-        // from reality; also the root cause of non-contract mock errors)
+        // from reality)
         bytes4[] memory selectors = new bytes4[](12);
         selectors[0] = SRAInvariantHandler.admit.selector;
         selectors[1] = SRAInvariantHandler.remove.selector;

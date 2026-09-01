@@ -45,7 +45,7 @@ contract SRAAdversarial is SRATestBase {
         sra.postVolume(10, FixedU18.wrap(_fpv(100e18)));
     }
 
-    /// q = uint64.max: with Epoch now uint64 (cherry-picked 8c3eff9), uint64.max × 1000 ≈ 2^83 > 2^64,
+    /// q = uint64.max: with Epoch now uint64, uint64.max × 1000 ≈ 2^83 > 2^64,
     /// so the _qEnd range guard fires -> InvalidParameter (this is the guard becoming the rejection
     /// path for MaxQuarter probes; the huge-EPOCHS_PER_QUARTER simulation below remains as an extra
     /// direct guard test).
