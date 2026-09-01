@@ -284,8 +284,9 @@ contract SRAAdversarial is SRATestBase {
         assertEq(sra.admittedCount(), 1); // state unchanged
     }
 
-    /// setAdmittedLists is event-only (snapshot semantics): the executed call emits
-    /// AdmittedListsUpdated carrying the full arrays; empty arrays emit an empty snapshot.
+    /// setAdmittedLists is event-only (snapshot semantics): the second approval (full vote) executes
+    /// immediately (unanimousNoHold) and emits AdmittedListsUpdated carrying the full arrays;
+    /// empty arrays emit an empty snapshot.
     function test_SetAdmittedLists_EmitsFullArrays() public {
         address token = makeAddr("usdc");
         address payContract = makeAddr("pay");
@@ -297,11 +298,9 @@ contract SRAAdversarial is SRATestBase {
         payContracts[0] = payContract;
         vm.prank(owner1);
         sra.setAdmittedLists(tokens, payContracts);
-        vm.prank(owner2);
-        sra.setAdmittedLists(tokens, payContracts);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectEmit(false, false, false, true, address(sra));
         emit ServiceRewardsActor.AdmittedListsUpdated(tokens, payContracts);
+        vm.prank(owner2);
         sra.setAdmittedLists(tokens, payContracts);
 
         // clear with empty arrays (the Filecoin Pay side has no public query;
@@ -309,11 +308,9 @@ contract SRAAdversarial is SRATestBase {
         address[] memory empty = new address[](0);
         vm.prank(owner1);
         sra.setAdmittedLists(empty, empty);
-        vm.prank(owner2);
-        sra.setAdmittedLists(empty, empty);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectEmit(false, false, false, true, address(sra));
         emit ServiceRewardsActor.AdmittedListsUpdated(empty, empty);
+        vm.prank(owner2);
         sra.setAdmittedLists(empty, empty);
     }
 

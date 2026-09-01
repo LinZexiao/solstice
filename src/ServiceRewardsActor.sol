@@ -401,7 +401,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      require normalization (only same-order calldata yields an identical taskId).
     function setAdmittedLists(address[] calldata stablecoins, address[] calldata filecoinPayContracts)
         external
-        unanimous(keccak256(msg.data), SRA_CANCEL_HOLD)
+        unanimousNoHold(keccak256(msg.data))
     {
         require(stablecoins.length <= MAX_ALLOWLIST && filecoinPayContracts.length <= MAX_ALLOWLIST, InvalidParameter());
         emit AdmittedListsUpdated(stablecoins, filecoinPayContracts);
@@ -416,11 +416,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     {
         require(minLotAlphaDen != 0 && priceBand <= BASIS_POINTS, InvalidParameter());
         emit PricingParamsUpdated(minLotFloor, minLotAlphaNum, minLotAlphaDen, priceBand);
-    }
-
-    /// @notice Either Safe calls _veto alone to discard a queued change (spec §4.2, _veto).
-    function cancelPending(bytes32 taskId) external {
-        _veto(taskId);
     }
 
     // ------------------------------------------------------------------------

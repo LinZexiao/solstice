@@ -5,7 +5,6 @@ pragma solidity ^0.8.36;
 //
 //   - two votes, immediate execution (unanimousNoHold — no permissionless path)
 //   - single vote does not execute; non-owner rejected
-//   - veto (cancelPending) discards a queued change
 //   - NO_HOLD (correctVolume) full-vote immediate execution
 //   - taskId = keccak256(msg.data): different array parameter order -> different taskId -> no merge (I2 risk)
 
@@ -80,37 +79,6 @@ contract SRAGovernanceTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // Veto (cancelPending)
-    // ------------------------------------------------------------------------
-
-    /// either Safe can veto to discard a queued change; after the veto the flow restarts.
-    /// (unanimousNoHold: the second vote executes, so the veto window is between the two votes.)
-    function test_Veto_CancelsPendingAdmit() public {
-        address orch = makeAddr("orch");
-
-        vm.prank(owner1);
-        sra.addOrchestrator(orch, orch); // vote 1: task pending
-
-        // owner1 changes their mind: cancelPending discards the task
-        bytes32 taskId = keccak256(abi.encodeWithSignature("addOrchestrator(address,address)", orch, orch));
-        vm.prank(owner1);
-        sra.cancelPending(taskId);
-
-        // the original task was deleted: owner1's resubmission is a fresh task (first vote), not an execution
-        vm.prank(owner1);
-        sra.addOrchestrator(orch, orch);
-        assertFalse(sra.isAdmitted(orch));
-    }
-
-    /// a non-owner cannot veto.
-    function test_Veto_NonOwner_Reverts() public {
-        bytes32 taskId = keccak256("whatever");
-        vm.prank(makeAddr("stranger"));
-        vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.NotOwner.selector, makeAddr("stranger")));
-        sra.cancelPending(taskId);
-    }
-
-    // ------------------------------------------------------------------------
     // NO_HOLD: correctVolume full-vote immediate execution
     // ------------------------------------------------------------------------
 
@@ -156,8 +124,9 @@ contract SRAGovernanceTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// Strategy 6/I2: different setAdmittedLists array orders -> different calldata -> different taskIds
-    /// -> the two Safes approve different tasks, each with only one vote; the change does not take effect
-    /// (task deadlock risk). With the allowlist event-only, "not taking effect" = no AdmittedListsUpdated emitted.
+    /// -> the two Safes approve different tasks, each with only one vote; neither reaches a full vote,
+    /// so the change does not take effect (I2 deadlock). With the allowlist event-only, "not taking
+    /// effect" = no AdmittedListsUpdated emitted.
     function test_TaskId_DifferentArrayOrder_DoesNotMerge() public {
         address usdc = makeAddr("usdc");
         address usdt = makeAddr("usdt");
@@ -170,7 +139,6 @@ contract SRAGovernanceTest is SRATestBase {
         sra.setAdmittedLists(_asArray(usdt, usdc), _asArray(address(0), address(0)));
 
         // the two votes are spread across two different tasks, each unable to reach a full vote -> the change never takes effect (I2 deadlock)
-        vm.roll(block.number + SRA_CANCEL_HOLD + 1000);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         for (uint256 i = 0; i < logs.length; i++) {
             assertTrue(
@@ -180,21 +148,20 @@ contract SRAGovernanceTest is SRATestBase {
         }
     }
 
-    /// Strategy 6/I2 control: same order (same calldata) -> two votes + hold -> execution takes effect.
-    function test_TaskId_SameArrayOrder_Executes() public {
+    /// Strategy 6/I2 control: same order (same calldata) -> one task reaches a full vote and the
+    /// second approval executes immediately (unanimousNoHold), emitting the new allowlist.
+    function test_TaskId_SameArrayOrder_SecondApprovalExecutes() public {
         address usdc = makeAddr("usdc");
         address[] memory stablecoins = _asArray(usdc, address(0));
 
         vm.prank(owner1);
         sra.setAdmittedLists(stablecoins, _asArray(address(0), address(0)));
-        vm.prank(owner2);
-        sra.setAdmittedLists(stablecoins, _asArray(address(0), address(0)));
-
-        vm.roll(block.number + SRA_CANCEL_HOLD);
-        // execution succeeded: the executing call emits the full-array snapshot (event-only allowlist,
-        // exclusive update — the emitted arrays are the authoritative new allowlist).
+        // the second approval (same calldata -> same taskId -> full vote) executes immediately and
+        // emits the full-array snapshot (event-only allowlist, exclusive update — the emitted arrays
+        // are the authoritative new allowlist).
         vm.expectEmit(false, false, false, true, address(sra));
         emit ServiceRewardsActor.AdmittedListsUpdated(stablecoins, _asArray(address(0), address(0)));
+        vm.prank(owner2);
         sra.setAdmittedLists(stablecoins, _asArray(address(0), address(0)));
     }
 
@@ -272,7 +239,8 @@ contract SRAGovernanceTest is SRATestBase {
     // F2: setAdmittedLists allowlist array-length bound
     // ------------------------------------------------------------------------
 
-    /// F2: setAdmittedLists with an allowlist array above MAX_ALLOWLIST (64) reverts InvalidParameter at body execution.
+    /// F2: setAdmittedLists with an allowlist array above MAX_ALLOWLIST (64) reverts InvalidParameter
+    /// at body execution — the second approval (full vote) executes the body and reverts.
     function test_SetAdmittedLists_TooManyEntries_Reverts() public {
         address[] memory stablecoins = new address[](65);
         for (uint256 i = 0; i < stablecoins.length; i++) {
@@ -282,8 +250,6 @@ contract SRAGovernanceTest is SRATestBase {
         vm.prank(owner1);
         sra.setAdmittedLists(stablecoins, new address[](0));
         vm.prank(owner2);
-        sra.setAdmittedLists(stablecoins, new address[](0));
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
         sra.setAdmittedLists(stablecoins, new address[](0));
     }

@@ -10,6 +10,7 @@ import {PendingOp, SERVICE_ID, Share, WeightRecord, WeightRecordUpdate} from "./
 import {OwnersLibrary} from "./lib/Owners.sol";
 import {UnanimousGovernance} from "./lib/UnanimousGovernance.sol";
 import {IsASafe} from "./lib/IsASafe.sol";
+import {SWA_TIMELOCK} from "./lib/FVMRewardMethod.sol";
 
 int256 constant STEP = 5e16; // 5%
 
@@ -28,7 +29,7 @@ contract StreamWeightActor is UnanimousGovernance {
     /// @notice Deploys the actor with its two initial owners, bound to a Service Rewards Actor.
     /// @param owner1 First owner; must be a Safe.
     /// @param owner2 Second owner; must be a Safe.
-    /// @param sra Service Rewards Actor supplying QUARTER/HOLD and gating `quarterlyGateCheck`.
+    /// @param sra Service Rewards Actor supplying QUARTER and gating `quarterlyGateCheck`.
     constructor(address owner1, address owner2, IServiceRewardsActor sra) {
         owner1.isProbablyASafe();
         owner2.isProbablyASafe();
@@ -38,7 +39,7 @@ contract StreamWeightActor is UnanimousGovernance {
 
         SRA = sra;
         QUARTER = sra.EPOCHS_PER_QUARTER();
-        HOLD = sra.SRA_CANCEL_HOLD();
+        HOLD = Epoch.wrap(SWA_TIMELOCK);
 
         GateParamsLibrary.init();
     }
