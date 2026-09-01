@@ -25,8 +25,8 @@ import {OwnersLibrary} from "./lib/Owners.sol";
 import {UnanimousGovernance} from "./lib/UnanimousGovernance.sol";
 import {IsASafe} from "./lib/IsASafe.sol";
 // Top-level SRA types (Binding / FilecoinPayVolume) and the ERC-7201 storage layout live in
-// separate library files (SraTypes.sol / SraStorage.sol) — extracted to simplify
-// the #5 proxy refactor; test files import the types from SraTypes.sol.
+// separate library files (SraTypes.sol / SraStorage.sol), so the proxy and implementation share
+// the same storage layout (single source of truth); test files import the types from SraTypes.sol.
 import {Binding, FilecoinPayVolume} from "./lib/SraTypes.sol";
 import {SraStorage} from "./lib/SraStorage.sol";
 
@@ -223,7 +223,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @notice An admitted orchestrator declares binding pairs; reverts if the pair is already bound to another (uniqueness).
     /// @dev C1: parameter uses a named struct Binding[] (inline tuple-array params are illegal in Solidity).
     function registerPairs(Binding[] calldata pairs) external {
-        require(pairs.length <= MAX_PAIRS, TooManyPairs()); // batch bound
+        require(pairs.length <= MAX_PAIRS, TooManyPairs());
         // single storage pointer — avoids hashing the orchestrators mapping twice
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[msg.sender];
@@ -453,7 +453,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // and the counter receives the full value; without an advance oldUsd is the current
         // quarter's value and the counter is adjusted by (value - oldUsd).
         FixedU18 oldUsd = o.fpv;
-        o.fpv = value; // FixedU18 — 18-decimal USD; value==0 clears (equivalent to not posted)
+        o.fpv = value; // value==0 clears (equivalent to not posted)
 
         qt.totalUsd[q] = qt.totalUsd[q] + value - oldUsd;
 

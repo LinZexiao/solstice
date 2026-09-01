@@ -448,7 +448,7 @@ contract SRASharesTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // W5: immediate f099 map push (FIPs#1277 §2.4.4) — removeOrchestrator / replaceWallet
+    // immediate f099 map push (FIPs#1277 §2.4.4) — removeOrchestrator / replaceWallet
     // after a submit re-push the f02 map at once; the LastShares snapshot drives it.
     // The spec §3.2 guard makes remove callable only outside an ended-quarter window, so all
     // remove-push scenarios are constructed after SubmitShares has run.

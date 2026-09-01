@@ -8,7 +8,7 @@ pragma solidity ^0.8.36;
 //   regenerate: python3 gen_cases.py
 //
 //   ⚠️ FIPs#1275 deviation from the generator: the bandCases()/aggCases() data and their helper structs
-//   (Period/Orch/AggCase/BandCase) were removed here — the band machinery is gone (no on-chain band
+//   (Period/Orch/AggCase/BandCase) are omitted — the band machinery is gone (no on-chain band
 //   determination) and FilecoinPayVolume aggregation collapses to a simple sum covered by the integration tests. Only
 //   shareCases() remains active (largest-remainder core). Re-running the generator would restore them.
 

@@ -90,7 +90,7 @@ contract SRAQuarterTest is SRATestBase {
         sra.postVolume(0, FixedU18.wrap(_fpv(200e18)));
     }
 
-    /// #7: zero posting is rejected — a zero total is equivalent to not posting, so
+    /// Zero posting is rejected — a zero total is equivalent to not posting, so
     ///     `usd == 0` unambiguously means "not posted" (postVolume requires > 0).
     function test_PostVolume_Zero_Reverts() public {
         address orch = makeAddr("orch");
@@ -102,7 +102,7 @@ contract SRAQuarterTest is SRATestBase {
         sra.postVolume(0, FixedU18.wrap(0));
     }
 
-    /// #7: CorrectVolume(0) clears a posted value (equivalent to not posted) —
+    /// CorrectVolume(0) clears a posted value (equivalent to not posted) —
     ///     the orchestrator is excluded from the aggregate.
     function test_CorrectVolume_Zero_Clears() public {
         address orch = makeAddr("orch");
