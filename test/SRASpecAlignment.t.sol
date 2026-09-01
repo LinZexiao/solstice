@@ -37,8 +37,8 @@ contract SRASpecAlignmentTest is SRATestBase {
         assertEq(sra.bindingOf(pairs[1].payer, pairs[1].operator), a);
 
         Reassignment[] memory rs = new Reassignment[](2);
-        rs[0] = Reassignment(pairs[0].payer, pairs[0].operator, b, true);
-        rs[1] = Reassignment(pairs[1].payer, pairs[1].operator, b, false);
+        rs[0] = Reassignment({payer: pairs[0].payer, operator: pairs[0].operator, orch: b, inherit: true});
+        rs[1] = Reassignment({payer: pairs[1].payer, operator: pairs[1].operator, orch: b, inherit: false});
 
         vm.prank(owner1);
         sra.reassignBindings(rs);
@@ -64,8 +64,8 @@ contract SRASpecAlignmentTest is SRATestBase {
         _registerPairsAs(a, pairs);
 
         Reassignment[] memory rs = new Reassignment[](2);
-        rs[0] = Reassignment(pairs[0].payer, pairs[0].operator, b, true); // valid
-        rs[1] = Reassignment(pairs[1].payer, pairs[1].operator, stranger, false); // invalid target
+        rs[0] = Reassignment({payer: pairs[0].payer, operator: pairs[0].operator, orch: b, inherit: true}); // valid
+        rs[1] = Reassignment({payer: pairs[1].payer, operator: pairs[1].operator, orch: stranger, inherit: false}); // invalid target
 
         vm.prank(owner1);
         sra.reassignBindings(rs);
@@ -84,12 +84,12 @@ contract SRASpecAlignmentTest is SRATestBase {
 
         Reassignment[] memory rs = new Reassignment[](65);
         for (uint256 i = 0; i < rs.length; i++) {
-            rs[i] = Reassignment(
-                makeAddr(string.concat("d1-cap-p", vm.toString(i))),
-                makeAddr(string.concat("d1-cap-o", vm.toString(i))),
-                a,
-                false
-            );
+            rs[i] = Reassignment({
+                payer: makeAddr(string.concat("d1-cap-p", vm.toString(i))),
+                operator: makeAddr(string.concat("d1-cap-o", vm.toString(i))),
+                orch: a,
+                inherit: false
+            });
         }
 
         vm.prank(owner1);
@@ -116,7 +116,7 @@ contract SRASpecAlignmentTest is SRATestBase {
 
         Reassignment[] memory rs = new Reassignment[](64);
         for (uint256 i = 0; i < rs.length; i++) {
-            rs[i] = Reassignment(pairs[i].payer, pairs[i].operator, b, false);
+            rs[i] = Reassignment({payer: pairs[i].payer, operator: pairs[i].operator, orch: b, inherit: false});
         }
 
         vm.prank(owner1);
@@ -145,7 +145,7 @@ contract SRASpecAlignmentTest is SRATestBase {
 
         Reassignment[] memory rs = new Reassignment[](3);
         for (uint256 i = 0; i < rs.length; i++) {
-            rs[i] = Reassignment(pairs[i].payer, pairs[i].operator, b, i % 2 == 0);
+            rs[i] = Reassignment({payer: pairs[i].payer, operator: pairs[i].operator, orch: b, inherit: i % 2 == 0});
         }
 
         vm.recordLogs();
@@ -177,7 +177,7 @@ contract SRASpecAlignmentTest is SRATestBase {
 
         // batch path: pair0 -> b
         Reassignment[] memory rs = new Reassignment[](1);
-        rs[0] = Reassignment(pairs[0].payer, pairs[0].operator, b, true);
+        rs[0] = Reassignment({payer: pairs[0].payer, operator: pairs[0].operator, orch: b, inherit: true});
         vm.prank(owner1);
         sra.reassignBindings(rs);
         vm.prank(owner2);

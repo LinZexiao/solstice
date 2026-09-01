@@ -26,7 +26,7 @@ import {UnanimousGovernance} from "./lib/UnanimousGovernance.sol";
 // Top-level SRA types (Binding / FilecoinPayVolume) and the ERC-7201 storage layout live in
 // separate library files (SraTypes.sol / SraStorage.sol), so the proxy and implementation share
 // the same storage layout (single source of truth); test files import the types from SraTypes.sol.
-import {Binding, FilecoinPayVolume} from "./lib/SraTypes.sol";
+import {Binding, FilecoinPayVolume, Reassignment} from "./lib/SraTypes.sol";
 import {SraStorage} from "./lib/SraStorage.sol";
 
 contract ServiceRewardsActor is UnanimousGovernance {
@@ -374,6 +374,19 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = _requireAdmittedId(orch);
         SraStorage.registry().bindings[_pairId(payer, operator)] = id;
         emit BindingReassigned(payer, operator, orch, inherit);
+    }
+
+    /// @notice Batch form of reassignBinding: each item reuses the single path's validation and
+    ///         event (per-item _requireAdmittedId, per-item BindingReassigned); atomicity comes
+    ///         from revert — any invalid item rolls the whole batch back.
+    function reassignBindings(Reassignment[] calldata rs) external unanimousNoHold(keccak256(msg.data)) {
+        require(rs.length <= MAX_PAIRS, TooManyPairs());
+        SraStorage.SraStorageRegistry storage r = SraStorage.registry();
+        for (uint256 i = 0; i < rs.length; i++) {
+            uint64 id = _requireAdmittedId(rs[i].orch);
+            r.bindings[_pairId(rs[i].payer, rs[i].operator)] = id;
+            emit BindingReassigned(rs[i].payer, rs[i].operator, rs[i].orch, rs[i].inherit);
+        }
     }
 
     /// @notice Governance release of a single binding: the pair returns to unclaimed and becomes claimable again.

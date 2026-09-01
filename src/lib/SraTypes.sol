@@ -8,6 +8,16 @@ struct Binding {
     address operator;
 }
 
+/// @notice One entry of the batch reassignBindings call: same fields as the single reassignBinding
+///         (payer/operator pair, target orchestrator, inherit flag), so each item reuses the single
+///         path's validation and event semantics.
+struct Reassignment {
+    address payer;
+    address operator;
+    address orch;
+    bool inherit;
+}
+
 /// @notice Quarterly FilecoinPayVolume: a single USD-denominated total (FIP-0118 §2.3, FIPs#1275: FIL→USD conversion moved
 ///         off-chain, so the SRA no longer stores pricing periods). `usd` is the face-USD stablecoin volume plus
 ///         the off-chain-converted FIL volume; `usd == 0` means not posted
