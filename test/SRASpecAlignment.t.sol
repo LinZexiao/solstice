@@ -417,7 +417,7 @@ contract SRASpecAlignmentTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// getter 返回部署时固定的 hold duration（基类部署值）。
-    function test_UpgradeHold_Getter_ReturnsDeploymentValue() public {
+    function test_UpgradeHold_Getter_ReturnsDeploymentValue() public view {
         assertEq(Epoch.unwrap(sra.sraUpgradeHold()), SRA_UPGRADE_HOLD);
     }
 
