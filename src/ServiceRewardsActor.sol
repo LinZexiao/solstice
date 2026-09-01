@@ -50,7 +50,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     Epoch public immutable EPOCHS_PER_QUARTER;
     Epoch private immutable POST_PERIOD;
     Epoch private immutable VERIFICATION_WINDOW;
-    Epoch private immutable SRA_CANCEL_HOLD;
     Epoch private immutable ACTIVATION_EPOCH;
 
     event OrchestratorAdmitted(address indexed orch, address wallet);
@@ -87,7 +86,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @param epochsPerQuarter quarter length (epochs)
     /// @param postPeriod posting window (epochs)
     /// @param verificationWindow verification window (epochs)
-    /// @param cancelHold governance hold (epochs)
     /// @param activationEpoch end epoch of quarter 0 (window start)
     constructor(
         address owner1,
@@ -95,7 +93,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         Epoch epochsPerQuarter,
         Epoch postPeriod,
         Epoch verificationWindow,
-        Epoch cancelHold,
         Epoch activationEpoch
     ) {
         owner1.isProbablyASafe();
@@ -113,7 +110,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         EPOCHS_PER_QUARTER = epochsPerQuarter;
         POST_PERIOD = postPeriod;
         VERIFICATION_WINDOW = verificationWindow;
-        SRA_CANCEL_HOLD = cancelHold;
         ACTIVATION_EPOCH = activationEpoch;
 
         // id allocator starts at 1: 0 is the unregistered sentinel (activeIdOf[addr] == 0)
@@ -375,7 +371,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @dev The released orchestrator is carried in the event (three indexed args like BindingDeclared/
     ///      BindingReassigned): after the delete, bindingOf returns 0, so without the orchestrator field an
     ///      off-chain indexer could not tell who lost the binding.
-    function cancelBinding(address payer, address operator) external unanimous(keccak256(msg.data), SRA_CANCEL_HOLD) {
+    function cancelBinding(address payer, address operator) external unanimousNoHold(keccak256(msg.data)) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         bytes32 pairId = _pairId(payer, operator);
         uint64 boundId = r.bindings[pairId];
@@ -423,8 +419,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // ------------------------------------------------------------------------
 
     /// @notice Only within the verification window, dual-Safe joint; replaces the posted value with the recomputed figure,
-    ///         or supplies the recomputed figure for an unposted orchestrator; exempt from SRA_CANCEL_HOLD (spec §4.2
-    ///         window-is-hold), allows bidirectional correction. Value is a single USD total (FIP-0118 FIPs#1275).
+    ///         or supplies the recomputed figure for an unposted orchestrator; effective immediately — the verification
+    ///         window itself is the hold (spec §4.2), allows bidirectional correction. Value is a single USD total (FIP-0118 FIPs#1275).
     /// @dev The unanimousNoHold modifier handles dual-Safe owner validation; the function body validates the verification window.
     function correctVolume(address orch, uint64 q, FixedU18 value) external unanimousNoHold(keccak256(msg.data)) {
         require(_inVerificationWindow(q), NotInVerificationWindow(q));
