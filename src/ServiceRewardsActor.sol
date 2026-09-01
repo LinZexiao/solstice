@@ -90,6 +90,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     error NotLatestQuarter(uint64 q); // FIP-0118 §4.2: an older quarter's shares can never overwrite a newer quarter's
     error PendingShares(uint64 q); // FIP-0118 §3.2: RemoveOrchestrator reverts while an ended quarter awaits its share map
     error TooManyPairs(); // registerPairs batch exceeds MAX_PAIRS
+    error DuplicateWallet(address wallet); // a wallet may belong to at most one admitted orchestrator
     error InvalidParameter();
 
     /// @param owner1,owner2 the two governance owners
@@ -294,6 +295,11 @@ contract ServiceRewardsActor is UnanimousGovernance {
     function addOrchestrator(address orch, address wallet) external unanimousNoHold(keccak256(msg.data)) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         require(r.activeIdOf[orch] == 0, AlreadyAdmitted(orch));
+        // Wallet uniqueness: a wallet may belong to at most one admitted orchestrator (a removed
+        // orchestrator's wallet is free — the check iterates admittedIds only, 64-cap keeps it cheap).
+        for (uint256 i = 0; i < r.admittedIds.length; i++) {
+            if (r.orchestrators[r.admittedIds[i]].wallet == wallet) revert DuplicateWallet(wallet);
+        }
         require(r.admittedIds.length < MAX_ORCHESTRATORS, AtCapacity());
         uint64 id = r.nextId;
         r.nextId = id + 1;
@@ -358,6 +364,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = r.activeIdOf[oldOrch];
         require(id != 0 && r.orchestrators[id].admitted, NotAdmitted(oldOrch));
         require(r.activeIdOf[newOrch] == 0, AlreadyAdmitted(newOrch));
+        // New wallet must not be held by any *other* admitted orchestrator (the id being replaced
+        // is excluded — its own wallet is being superseded, not duplicated).
+        for (uint256 i = 0; i < r.admittedIds.length; i++) {
+            uint64 otherId = r.admittedIds[i];
+            if (otherId != id && r.orchestrators[otherId].wallet == newOrch) revert DuplicateWallet(newOrch);
+        }
 
         r.activeIdOf[oldOrch] = 0;
         r.activeIdOf[newOrch] = id;
