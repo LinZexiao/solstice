@@ -26,7 +26,6 @@ contract QuarterWindowHarness is ServiceRewardsActor {
             Epoch.wrap(1000), // epochsPerQuarter
             Epoch.wrap(300), // postPeriod
             Epoch.wrap(400), // verificationWindow
-            Epoch.wrap(100), // cancelHold
             Epoch.wrap(100_000) // activationEpoch
         )
     {}

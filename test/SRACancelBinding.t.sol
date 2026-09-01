@@ -3,8 +3,9 @@ pragma solidity ^0.8.36;
 
 // SRA cancelBinding tests — governance-level release of a single binding (issue #34)
 //
-// cancelBinding is a spec-external governance method (unanimous + hold, reassignBinding-level):
-// it deletes bindings[pairId] so the pair returns to unclaimed and becomes claimable again.
+// cancelBinding is a spec-external governance method (unanimousNoHold, immediate — the same
+// governance level as reassignBinding, spec §4.2): it deletes bindings[pairId] so the pair
+// returns to unclaimed and becomes claimable again.
 //
 // Guard semantics: cancel requires a *live* binding — boundId != 0 AND the bound id is still
 // admitted. A removed orchestrator's binding is already equivalent-unclaimed under registerPairs
@@ -29,13 +30,11 @@ contract SRACancelBindingTest is SRATestBase {
         return keccak256(abi.encode(payer, operator));
     }
 
-    /// governance release: two Safe approvals + hold elapsed + permissionless third call (like _admit).
+    /// governance release: two Safe approvals, the second executes immediately (unanimousNoHold).
     function _cancelBinding(address payer, address operator) internal {
         vm.prank(owner1);
         sra.cancelBinding(payer, operator);
         vm.prank(owner2);
-        sra.cancelBinding(payer, operator);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         sra.cancelBinding(payer, operator);
     }
 
@@ -94,11 +93,9 @@ contract SRACancelBindingTest is SRATestBase {
 
         vm.prank(owner1);
         sra.cancelBinding(payer, operator);
-        vm.prank(owner2);
-        sra.cancelBinding(payer, operator);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectEmit(true, true, true, false, address(sra));
         emit ServiceRewardsActor.BindingCanceled(payer, operator, orch);
+        vm.prank(owner2); // second approval executes immediately
         sra.cancelBinding(payer, operator);
     }
 
@@ -114,10 +111,8 @@ contract SRACancelBindingTest is SRATestBase {
 
         vm.prank(owner1);
         sra.cancelBinding(payer, operator);
-        vm.prank(owner2);
-        sra.cancelBinding(payer, operator);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PairNotBound.selector, pairId));
+        vm.prank(owner2); // second approval executes immediately and reverts at the guard
         sra.cancelBinding(payer, operator);
     }
 
@@ -137,10 +132,8 @@ contract SRACancelBindingTest is SRATestBase {
         bytes32 pairId = _pairId(payer, operator);
         vm.prank(owner1);
         sra.cancelBinding(payer, operator);
-        vm.prank(owner2);
-        sra.cancelBinding(payer, operator);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PairNotBound.selector, pairId));
+        vm.prank(owner2); // second approval executes immediately and reverts at the guard
         sra.cancelBinding(payer, operator);
     }
 
@@ -164,10 +157,8 @@ contract SRACancelBindingTest is SRATestBase {
         bytes32 pairId = _pairId(payer, operator);
         vm.prank(owner1);
         sra.cancelBinding(payer, operator);
-        vm.prank(owner2);
-        sra.cancelBinding(payer, operator);
-        vm.roll(block.number + SRA_CANCEL_HOLD);
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PairNotBound.selector, pairId));
+        vm.prank(owner2); // second approval executes immediately and reverts at the guard
         sra.cancelBinding(payer, operator);
 
         // the pair stays claimable by another orchestrator (registerPairs sees it as unclaimed)

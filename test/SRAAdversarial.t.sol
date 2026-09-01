@@ -116,7 +116,6 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(1 << 40), // EPOCHS_PER_QUARTER: uint64.max × 2^40 ≈ 2^104 > 2^64
             Epoch.wrap(POST_PERIOD),
             Epoch.wrap(VERIFICATION_WINDOW),
-            Epoch.wrap(SRA_CANCEL_HOLD),
             Epoch.wrap(ACTIVATION_EPOCH)
         );
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.InvalidParameter.selector));
@@ -357,7 +356,6 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(500), // EPOCHS
             Epoch.wrap(300), // POST
             Epoch.wrap(400), // VERIFY: 300 + 400 = 700 > 500 -> overlap
-            Epoch.wrap(SRA_CANCEL_HOLD),
             Epoch.wrap(ACTIVATION_EPOCH)
         );
     }
@@ -373,7 +371,6 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(type(uint64).max), // EPOCHS: 2^64 - 1
             Epoch.wrap(uint64(2 ** 63)), // POST
             Epoch.wrap(uint64(2 ** 63)), // VERIFY: uint64 sum wraps to 0; uint256 sum = 2^64 > EPOCHS -> rejected
-            Epoch.wrap(SRA_CANCEL_HOLD),
             Epoch.wrap(ACTIVATION_EPOCH)
         );
     }
@@ -389,7 +386,6 @@ contract SRAAdversarial is SRATestBase {
             Epoch.wrap(700), // EPOCHS
             Epoch.wrap(300), // POST
             Epoch.wrap(400), // VERIFY: 300 + 400 = 700 == EPOCHS -> rejected (strict)
-            Epoch.wrap(SRA_CANCEL_HOLD),
             Epoch.wrap(ACTIVATION_EPOCH)
         );
     }

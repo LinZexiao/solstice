@@ -7,7 +7,8 @@ pragma solidity ^0.8.36;
 //   replace / remove, plus the historical-quarter fallback.
 //
 // Time model (test base): E(Q)=100000+Q*1000; posting (E,E+300]; verification
-//   (E+300,E+700]; post-binding > E+700. SRA_CANCEL_HOLD=100 per governance step.
+//   (E+300,E+700]; post-binding > E+700. Governance methods execute immediately
+//   (unanimousNoHold, spec §4.2).
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
