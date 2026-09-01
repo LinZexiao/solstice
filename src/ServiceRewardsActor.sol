@@ -22,7 +22,6 @@ import {FVMRewards} from "./lib/FVMRewards.sol";
 import {SERVICE_ID, Share} from "./lib/FVMRewardTypes.sol";
 import {OwnersLibrary} from "./lib/Owners.sol";
 import {UnanimousGovernance} from "./lib/UnanimousGovernance.sol";
-import {IsASafe} from "./lib/IsASafe.sol";
 // Top-level SRA types (Binding / FilecoinPayVolume) and the ERC-7201 storage layout live in
 // separate library files (SraTypes.sol / SraStorage.sol) — extracted to simplify
 // the #5 proxy refactor; test files import the types from SraTypes.sol.
@@ -30,7 +29,6 @@ import {Binding, FilecoinPayVolume} from "./lib/SraTypes.sol";
 import {SraStorage} from "./lib/SraStorage.sol";
 
 contract ServiceRewardsActor is UnanimousGovernance {
-    using IsASafe for address;
     using OwnersLibrary for address;
 
     /// @dev Total share (f02 encoding constraint: Σ shares must be exactly == 1e18).
@@ -87,7 +85,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     error TooManyPairs(); // registerPairs batch exceeds MAX_PAIRS
     error InvalidParameter();
 
-    /// @param owner1,owner2 governance dual Safe (must be Safe proxies)
+    /// @param owner1,owner2 the two governance owners
     /// @param epochsPerQuarter quarter length (epochs)
     /// @param postPeriod posting window (epochs)
     /// @param verificationWindow verification window (epochs)
@@ -105,8 +103,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint256 minLot,
         uint256 priceBand
     ) {
-        owner1.isProbablyASafe();
-        owner2.isProbablyASafe();
         owner1.addOwner();
         owner2.addOwner();
 
@@ -431,10 +427,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         emit BindingReassigned(payer, operator, orch);
     }
 
-    /// @notice Owner rotation: dual-Safe, effective immediately (unanimousNoHold path,
-    ///         aligned with upstream SWA's replaceOwner). newOwner must be a Safe proxy.
+    /// @notice Owner rotation, effective immediately (unanimousNoHold path,
+    ///         aligned with upstream SWA's replaceOwner).
     function replaceOwner(address prevOwner, address newOwner) external unanimousNoHold(keccak256(msg.data)) {
-        newOwner.isProbablyASafe();
         prevOwner.removeOwner();
         newOwner.addOwner();
     }

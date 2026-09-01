@@ -11,8 +11,6 @@ pragma solidity ^0.8.36;
 //   FilecoinPayVolume is a single USD total (FIP-0118 FIPs#1275: off-chain conversion)
 //   PRICE_BAND in basis points (2000 = allows ±20% deviation); authoritative for the off-chain indexer
 
-import {SafeProxy} from "@safe/proxies/SafeProxy.sol";
-
 import {MockRewardTest} from "./mocks/MockRewardTest.sol";
 import {WAD} from "./mocks/FVMRewardActor.sol";
 
@@ -24,7 +22,7 @@ import {SERVICE_ID, Share, WeightRecord} from "../src/lib/FVMRewardTypes.sol";
 import {FVMRewards} from "../src/lib/FVMRewards.sol";
 import {SWA_TIMELOCK} from "../src/lib/FVMRewardMethod.sol";
 
-/// @notice Common test base: deploys the SRA, builds Safe owners, registers service stream 2, quarterly time utilities.
+/// @notice Common test base: deploys the SRA, builds owners, registers service stream 2, quarterly time utilities.
 contract SRATestBase is MockRewardTest {
     ServiceRewardsActor internal sra;
     address internal owner1;
@@ -45,8 +43,8 @@ contract SRATestBase is MockRewardTest {
 
     function setUp() public virtual override {
         super.setUp();
-        owner1 = _makeSafeOwner("sra-owner1");
-        owner2 = _makeSafeOwner("sra-owner2");
+        owner1 = makeAddr("sra-owner1");
+        owner2 = makeAddr("sra-owner2");
         sra = new ServiceRewardsActor(
             owner1,
             owner2,
@@ -59,19 +57,6 @@ contract SRATestBase is MockRewardTest {
             PRICE_BAND
         );
         _registerServiceStream();
-    }
-
-    /// @dev Builds a Safe proxy address (following the SWA test technique: masterCopy + SafeProxy + vm.etch + slot0).
-    function _makeSafeOwner(string memory label) internal returns (address proxyAddr) {
-        address masterCopy = makeAddr(string.concat(label, "-mastercopy"));
-        vm.etch(masterCopy, new bytes(8001));
-
-        SafeProxy real = new SafeProxy(masterCopy);
-        bytes memory code = address(real).code;
-
-        proxyAddr = makeAddr(label);
-        vm.etch(proxyAddr, code);
-        vm.store(proxyAddr, bytes32(0), bytes32(uint256(uint160(masterCopy))));
     }
 
     /// @dev migration pins service stream = 2, already registered with writer = SRA:

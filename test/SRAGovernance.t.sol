@@ -17,7 +17,6 @@ import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
 import {FilecoinPayVolume} from "../src/lib/SraTypes.sol";
 import {UnanimousGovernance} from "../src/lib/UnanimousGovernance.sol";
-import {IsASafe} from "../src/lib/IsASafe.sol";
 
 contract SRAGovernanceTest is SRATestBase {
     // ------------------------------------------------------------------------
@@ -229,10 +228,10 @@ contract SRAGovernanceTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// E1: replaceOwner uses unanimousNoHold — the second approval executes immediately,
-    ///     revoking the old owner and adding the new Safe; the old owner can no longer vote,
+    ///     revoking the old owner and adding the new one; the old owner can no longer vote,
     ///     the new owner can (behavioral ownership assertion, matching SWA which exposes no isOwner view).
     function test_ReplaceOwner_SecondApproval_ExecutesImmediately() public {
-        address newOwner = _makeSafeOwner("sra-owner3");
+        address newOwner = makeAddr("sra-owner3");
 
         vm.prank(owner1);
         sra.replaceOwner(owner1, newOwner); // first vote only: not a full vote, ownership unchanged
@@ -249,19 +248,23 @@ contract SRAGovernanceTest is SRATestBase {
         sra.admit(makeAddr("orch-new-owner-vote")); // no revert => newOwner is an owner
     }
 
-    /// E1: a non-Safe newOwner is rejected — NotSafeProxy at body execution (second approval).
-    function test_ReplaceOwner_NonSafeNewOwner_Reverts() public {
-        address badOwner = makeAddr("not-safe");
+    /// Any address type is accepted, so unanimity is the only gate on who becomes an owner.
+    function test_ReplaceOwner_EoaNewOwner_Accepted() public {
+        address eoaOwner = makeAddr("eoa-owner");
 
         vm.prank(owner1);
-        sra.replaceOwner(owner1, badOwner); // first vote OK (approve only, body not executed)
+        sra.replaceOwner(owner1, eoaOwner); // first vote only: approve, body not executed
         vm.prank(owner2);
-        vm.expectRevert(abi.encodeWithSelector(IsASafe.NotSafeProxy.selector, badOwner));
-        sra.replaceOwner(owner1, badOwner); // second vote: body executes -> NotSafeProxy revert
+        sra.replaceOwner(owner1, eoaOwner); // second vote executes immediately
 
-        // ownership unchanged after the failed rotation
+        // old owner revoked
         vm.prank(owner1);
-        sra.admit(makeAddr("orch-still-owner1")); // owner1 still an owner: no revert
+        vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.NotOwner.selector, owner1));
+        sra.admit(makeAddr("orch-after-eoa-rotation"));
+
+        // the EOA is a full owner
+        vm.prank(eoaOwner);
+        sra.admit(makeAddr("orch-eoa-vote")); // no revert => eoaOwner is an owner
     }
 
     /// E1: a non-owner calling replaceOwner is rejected on the first vote (NotOwner).

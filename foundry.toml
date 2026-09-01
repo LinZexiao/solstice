@@ -15,7 +15,6 @@ bytecode_hash = "none"
 remappings = [
     'forge-std/=lib/forge-std/src/',
     'fvm-solidity/=lib/fvm-solidity/src/',
-    '@safe/=lib/safe-smart-account/contracts/',
 ]
 
 [lint]

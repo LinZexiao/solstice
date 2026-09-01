@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0 OR MIT
 pragma solidity ^0.8.36;
 
-import {SafeProxy} from "@safe/proxies/SafeProxy.sol";
-
 import {USR_FORBIDDEN, USR_ILLEGAL_ARGUMENT, USR_NOT_FOUND} from "fvm-solidity/FVMErrors.sol";
 
 import {MockRewardTest} from "./mocks/MockRewardTest.sol";
@@ -28,8 +26,8 @@ contract StreamWeightActorTest is MockRewardTest {
 
     function setUp() public override {
         super.setUp();
-        owner1 = _makeSafeOwner("owner1");
-        owner2 = _makeSafeOwner("owner2");
+        owner1 = makeAddr("owner1");
+        owner2 = makeAddr("owner2");
 
         address sra = makeAddr("sra");
         vm.mockCall(
@@ -39,18 +37,6 @@ contract StreamWeightActorTest is MockRewardTest {
 
         actor = new StreamWeightActor(owner1, owner2, IServiceRewardsActor(sra));
         rewardActor().mockSwa(address(actor));
-    }
-
-    function _makeSafeOwner(string memory label) internal returns (address proxyAddr) {
-        address masterCopy = makeAddr(string.concat(label, "-mastercopy"));
-        vm.etch(masterCopy, new bytes(8001));
-
-        SafeProxy real = new SafeProxy(masterCopy);
-        bytes memory code = address(real).code;
-
-        proxyAddr = makeAddr(label);
-        vm.etch(proxyAddr, code);
-        vm.store(proxyAddr, bytes32(0), bytes32(uint256(uint160(masterCopy))));
     }
 
     // -------------------------------------------------------------------------
@@ -286,7 +272,7 @@ contract StreamWeightActorTest is MockRewardTest {
     // -------------------------------------------------------------------------
 
     function test_ReplaceOwner_Success_SwapsApprovalRights() public {
-        address newOwner = _makeSafeOwner("newOwner");
+        address newOwner = makeAddr("newOwner");
 
         vm.prank(owner1);
         actor.replaceOwner(owner2, newOwner);

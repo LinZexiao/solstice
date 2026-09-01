@@ -24,8 +24,8 @@ import {SERVICE_ID, Share} from "../src/lib/FVMRewardTypes.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
 import {Binding} from "../src/lib/SraTypes.sol";
-import {IsASafe} from "../src/lib/IsASafe.sol";
 import {SRATestBase} from "./SRATestBase.sol";
+import {UnanimousGovernance} from "../src/lib/UnanimousGovernance.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 
 contract SRAAdversarial is SRATestBase {
@@ -190,13 +190,19 @@ contract SRAAdversarial is SRATestBase {
         assertEq(sra.bindingOf(address(0), operator), orch);
     }
 
-    /// replaceOwner with the zero address as newOwner -> NotSafeProxy(0) (EXTCODESIZE(0) = 0 <= 56).
-    function test_ReplaceOwner_ZeroNewOwner_NotSafeProxy() public {
+    /// replaceOwner with the zero address as newOwner is ACCEPTED
+    /// There are no guards against bad msig or address shapes, so unanimity is the only
+    /// protection against rotating ownership into an unrecoverable address. Locked as behaviour.
+    function test_ReplaceOwner_ZeroNewOwner_Accepted() public {
         vm.prank(owner1);
         sra.replaceOwner(owner1, address(0));
         vm.prank(owner2);
-        vm.expectRevert(abi.encodeWithSelector(IsASafe.NotSafeProxy.selector, address(0)));
         sra.replaceOwner(owner1, address(0));
+
+        // owner1 was rotated out in favour of address(0)
+        vm.prank(owner1);
+        vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.NotOwner.selector, owner1));
+        sra.admit(makeAddr("orch-after-zero-rotation"));
     }
 
     /// reassignBinding to the zero address -> NotAdmitted(0) at body execution.
