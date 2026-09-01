@@ -22,7 +22,6 @@ contract StreamWeightActorTest is MockRewardTest {
     address constant WRITER = address(0xBEEF);
 
     Epoch constant TEST_QUARTER = Epoch.wrap(262980); // epochs per 365.25/4 days
-    Epoch constant TEST_HOLD = Epoch.wrap(2 * 60 * 24 * 7); // epochs per 7 days
 
     function setUp() public override {
         super.setUp();
@@ -33,7 +32,6 @@ contract StreamWeightActorTest is MockRewardTest {
         vm.mockCall(
             sra, abi.encodeWithSelector(IServiceRewardsActor.EPOCHS_PER_QUARTER.selector), abi.encode(TEST_QUARTER)
         );
-        vm.mockCall(sra, abi.encodeWithSelector(IServiceRewardsActor.SRA_CANCEL_HOLD.selector), abi.encode(TEST_HOLD));
 
         actor = new StreamWeightActor(owner1, owner2, IServiceRewardsActor(sra));
         rewardActor().mockSwa(address(actor));
