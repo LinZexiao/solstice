@@ -66,9 +66,15 @@ contract ServiceRewardsActor is UnanimousGovernance {
     event BindingCanceled(address indexed payer, address indexed operator, address indexed orchestrator);
     event OwnersReplaced(address indexed prevOwner, address indexed newOwner);
     event AdmittedListsUpdated(address[] stablecoins, address[] filecoinPayContracts);
-    event PricingParamsUpdated(uint256 minLotFloor, uint256 minLotAlphaNum, uint256 minLotAlphaDen, uint256 priceBand);
+    event PricingParamsUpdated(
+        uint256 minLotFloor,
+        uint256 minLotAlphaNum,
+        uint256 minLotAlphaDen,
+        uint256 priceBand,
+        uint256 registrationCutoff
+    );
     event VolumePosted(uint64 indexed q, address indexed orchestrator, FixedU18 volume);
-    event VolumeCorrected(uint64 indexed q, address indexed orchestrator);
+    event VolumeCorrected(uint64 indexed q, address indexed orchestrator, FixedU18 volume);
     event SharesSubmitted(uint64 indexed q, uint256 recipientCount, FixedU18 totalUsd);
 
     error NotAdmitted(address orch);
@@ -429,14 +435,19 @@ contract ServiceRewardsActor is UnanimousGovernance {
     }
 
     /// @notice Updates the FIL pricing parameters MIN_LOT_FLOOR / MIN_LOT_ALPHA (rational, num/den)
-    ///         / PRICE_BAND. Stores nothing: the call's only effect is the parameter event; the new
-    ///         values apply from the next quarter boundary (off-chain indexer semantics, FIPs#1275).
-    function setPricingParams(uint256 minLotFloor, uint256 minLotAlphaNum, uint256 minLotAlphaDen, uint256 priceBand)
-        external
-        unanimousNoHold(keccak256(msg.data))
-    {
+    ///         / PRICE_BAND and the REGISTRATION_CUTOFF (spec 8e495ca). Stores nothing: the call's
+    ///         only effect is the parameter event; the new values apply from the next quarter boundary
+    ///         (off-chain indexer semantics, FIPs#1275). REGISTRATION_CUTOFF parameterizes the off-chain
+    ///         late-claim guard (spec §2.2) as an epoch duration and is likewise event-only.
+    function setPricingParams(
+        uint256 minLotFloor,
+        uint256 minLotAlphaNum,
+        uint256 minLotAlphaDen,
+        uint256 priceBand,
+        uint256 registrationCutoff
+    ) external unanimousNoHold(keccak256(msg.data)) {
         require(minLotAlphaDen != 0 && priceBand <= BASIS_POINTS, InvalidParameter());
-        emit PricingParamsUpdated(minLotFloor, minLotAlphaNum, minLotAlphaDen, priceBand);
+        emit PricingParamsUpdated(minLotFloor, minLotAlphaNum, minLotAlphaDen, priceBand, registrationCutoff);
     }
 
     // ------------------------------------------------------------------------
@@ -473,7 +484,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
         qt.totalUsd[q] = qt.totalUsd[q] + value - oldUsd;
 
-        emit VolumeCorrected(q, orch);
+        emit VolumeCorrected(q, orch, value);
     }
 
     // ------------------------------------------------------------------------

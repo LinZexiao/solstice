@@ -264,9 +264,9 @@ contract SRAQuarterTest is SRATestBase {
     function test_SetPricingParams_UpdatesParams_EmitsEvent() public {
         vm.recordLogs();
         vm.prank(owner1);
-        sra.setPricingParams(2e18, 1, 400, 1500);
+        sra.setPricingParams(2e18, 1, 400, 1500, 20160);
         vm.prank(owner2);
-        sra.setPricingParams(2e18, 1, 400, 1500); // second vote executes (unanimousNoHold)
+        sra.setPricingParams(2e18, 1, 400, 1500, 20160); // second vote executes (unanimousNoHold)
 
         Vm.Log[] memory logs = vm.getRecordedLogs();
         bytes32 topic = ServiceRewardsActor.PricingParamsUpdated.selector;
@@ -289,17 +289,17 @@ contract SRAQuarterTest is SRATestBase {
         address stranger = makeAddr("stranger");
         vm.prank(stranger);
         vm.expectRevert();
-        sra.setPricingParams(2e18, 1, 400, 1500);
+        sra.setPricingParams(2e18, 1, 400, 1500, 20160);
     }
 
     /// G1: invalid params (band > 10000) -> InvalidParameter at the second vote (bind-at-once).
     function test_SetPricingParams_InvalidParams_Reverts() public {
         // band > BASIS_POINTS(10000) is invalid
         vm.prank(owner1);
-        sra.setPricingParams(2e18, 1, 400, 10001);
+        sra.setPricingParams(2e18, 1, 400, 10001, 20160);
         vm.prank(owner2);
         vm.expectRevert();
-        sra.setPricingParams(2e18, 1, 400, 10001);
+        sra.setPricingParams(2e18, 1, 400, 10001, 20160);
     }
 
     // ------------------------------------------------------------------------

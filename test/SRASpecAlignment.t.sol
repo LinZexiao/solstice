@@ -231,7 +231,7 @@ contract SRASpecAlignmentTest is SRATestBase {
         assertEq(hits, 1, "PricingParamsUpdated emitted once");
     }
 
-    /// registrationCutoff 传递 + 事件携带全部 5 值（cutoff = 20160 epochs = 7 days @ 30s，spec 初始值语义）。
+    /// registrationCutoff 传递 + 事件携带全部 5 值（cutoff = 20160 epochs = 7 days at 30s block time，spec 初始值语义）。
     function test_SetPricingParams_Cutoff_EmitsAllFive() public {
         _setPricingParams(5e17, 1, 400, 3000, 20160);
     }
@@ -269,6 +269,9 @@ contract SRASpecAlignmentTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// 治理纠正后，VolumeCorrected 携带 corrected 值（与 VolumePosted 对称）。
+    /// @dev expectEmit cannot be used here: correctVolume runs the unanimousNoHold two-vote path,
+    ///      so the function-body event is preceded by Submitted/Approved; recordLogs + topic filter
+    ///      (as in _setPricingParams) extracts VolumeCorrected from the full stream.
     function test_CorrectVolume_EmitsVolume() public {
         address orch = makeAddr("d3-orch");
         _admit(orch, orch);
@@ -277,9 +280,19 @@ contract SRASpecAlignmentTest is SRATestBase {
         _postAs(orch, 0, _fpv(100e18));
 
         vm.roll(_qPostEnd(0) + 1); // verification window
-        vm.expectEmit(true, true, false, true, address(sra));
-        emit ServiceRewardsActor.VolumeCorrected(0, orch, FixedU18.wrap(250e18));
+        vm.recordLogs();
         _correctVolume(orch, 0, 250e18);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 hits;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] != ServiceRewardsActor.VolumeCorrected.selector) continue;
+            hits++;
+            assertEq(uint64(uint256(logs[i].topics[1])), 0, "indexed quarter");
+            assertEq(address(uint160(uint256(logs[i].topics[2]))), orch, "indexed orchestrator");
+            assertEq(FixedU18.unwrap(abi.decode(logs[i].data, (FixedU18))), 250e18, "corrected volume");
+        }
+        assertEq(hits, 1, "VolumeCorrected emitted once");
     }
 
     /// correctVolume(0)（清除，等效未发布）也携带 0 值。
@@ -291,9 +304,19 @@ contract SRASpecAlignmentTest is SRATestBase {
         _postAs(orch, 0, _fpv(100e18));
 
         vm.roll(_qPostEnd(0) + 1); // verification window
-        vm.expectEmit(true, true, false, true, address(sra));
-        emit ServiceRewardsActor.VolumeCorrected(0, orch, FixedU18.wrap(0));
+        vm.recordLogs();
         _correctVolume(orch, 0, 0);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 hits;
+        for (uint256 i = 0; i < logs.length; i++) {
+            if (logs[i].topics[0] != ServiceRewardsActor.VolumeCorrected.selector) continue;
+            hits++;
+            assertEq(uint64(uint256(logs[i].topics[1])), 0, "indexed quarter");
+            assertEq(address(uint160(uint256(logs[i].topics[2]))), orch, "indexed orchestrator");
+            assertEq(FixedU18.unwrap(abi.decode(logs[i].data, (FixedU18))), 0, "cleared volume");
+        }
+        assertEq(hits, 1, "VolumeCorrected emitted once");
     }
 
     // ------------------------------------------------------------------------
