@@ -203,11 +203,11 @@ contract SRAGovernanceTest is SRATestBase {
         // old owner revoked
         vm.prank(owner1);
         vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.NotOwner.selector, owner1));
-        sra.admit(makeAddr("orch-after-eoa-rotation"));
+        sra.addOrchestrator(makeAddr("orch-after-eoa-rotation"), makeAddr("orch-after-eoa-rotation"));
 
         // the EOA is a full owner
         vm.prank(eoaOwner);
-        sra.admit(makeAddr("orch-eoa-vote")); // no revert => eoaOwner is an owner
+        sra.addOrchestrator(makeAddr("orch-eoa-vote"), makeAddr("orch-eoa-vote")); // no revert => eoaOwner is an owner
     }
 
     /// E1: a non-owner calling replaceOwner is rejected on the first vote (NotOwner).

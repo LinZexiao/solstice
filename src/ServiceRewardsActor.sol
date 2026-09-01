@@ -37,7 +37,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     uint256 private constant BASIS_POINTS = 10_000;
 
-    /// @dev D2: admitted orchestrator cap, matching f02 MAX_RECIPIENTS.
+    /// @dev Admitted orchestrator cap, matching f02 MAX_RECIPIENTS.
     uint256 private constant MAX_ORCHESTRATORS = 64;
     uint256 private constant MAX_PAIRS = 64;
     uint256 private constant MAX_ALLOWLIST = 64;
@@ -288,7 +288,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // Governance operations (dual Safe, unanimous path; no-hold on signature-finalized methods)
     // ------------------------------------------------------------------------
 
-    /// @notice Admits an orchestrator with its payout wallet; rejects when admitted total >= 64 (D2).
+    /// @notice Admits an orchestrator with its payout wallet; rejects when admitted total >= 64.
     /// @dev Re-admit of a previously removed/replaced address allocates a fresh id — a fresh identity with no
     ///      bindings, FilecoinPayVolume, or history. Because ids are never reused and the address mapping (activeIdOf)
     ///      is cleared on remove/replace, there is no residual alias-chain or state to clean up.
@@ -349,10 +349,11 @@ contract ServiceRewardsActor is UnanimousGovernance {
         emit OrchestratorRemoved(orch, reason);
     }
 
-    /// @notice Operator address change (spec §4.2). Identity (contribution slots) and all bindings transfer to newOrch.
-    /// @dev O(1) wallet re-point: the id (identity) stays put, only the address mapping and the wallet field
-    ///      change. bindings/fpv state both key on the id, so they follow the identity automatically —
-    ///      no enumeration, no alias chain, and historical quarter FilecoinPayVolume remains aggregated.
+    /// @notice Swaps the payout wallet (spec §3.2): the Orchestrator identity does not move — bindings,
+    ///         accrued volumes, and contribution slots stay with the same orchestrator.
+    /// @dev O(1) wallet re-point: only the id's wallet field changes. bindings/fpv state both key on
+    ///      the id, so they keep resolving to the same orchestrator (the identity never moves), and
+    ///      historical quarter FilecoinPayVolume remains aggregated.
     /// @dev extradata carries the Orchestrator's co-signature (old-wallet rotation or new-wallet liveness proof,
     ///      spec §4.2) and is not parsed here: Filecoin signatures cannot be verified in Solidity, so the payload
     ///      is recorded verbatim for off-chain verification and correction disputes.
@@ -363,7 +364,6 @@ contract ServiceRewardsActor is UnanimousGovernance {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[oldOrch];
         require(id != 0 && r.orchestrators[id].admitted, NotAdmitted(oldOrch));
-        require(r.activeIdOf[newOrch] == 0, AlreadyAdmitted(newOrch));
         // New wallet must not be held by any *other* admitted orchestrator (the id being replaced
         // is excluded — its own wallet is being superseded, not duplicated).
         for (uint256 i = 0; i < r.admittedIds.length; i++) {
@@ -371,10 +371,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
             if (otherId != id && r.orchestrators[otherId].wallet == newOrch) revert DuplicateWallet(newOrch);
         }
 
-        r.activeIdOf[oldOrch] = 0;
-        r.activeIdOf[newOrch] = id;
         r.orchestrators[id].wallet = newOrch;
-        // admittedIds unchanged (stores ids); bindings/fpv state all follow the id.
         // Immediate wallet-swap push: the id's share stays (prospective — identity and accrued do not
         // move), only the map's wallet for this id is replaced (spec §3.2). Snapshot id→share unchanged.
         _pushWalletSwap(id, newOrch);

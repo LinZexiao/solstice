@@ -362,11 +362,11 @@ contract SRASharesTest is SRATestBase {
     }
 
     // ------------------------------------------------------------------------
-    // id-keyed identity: replace = O(1) wallet re-point (behavioral lock)
+    // id-keyed identity: replaceWallet = O(1) payout-wallet re-point (spec §3.2: identity does not move)
     // ------------------------------------------------------------------------
 
-    /// id-keyed identity: replace re-points the wallet — historical quarter FilecoinPayVolume
-    /// follows the identity by construction (the id keeps its contributions across the re-point).
+    /// id-keyed identity: replaceWallet re-points the payout wallet only — the identity (id) does not
+    /// move, so historical quarter FilecoinPayVolume stays aggregated under the same orchestrator.
     function test_Replace_HistoricalQuarterFilecoinPayVolume_Kept() public {
         address oldOrch = makeAddr("hist-old");
         address newOrch = makeAddr("hist-new");
@@ -374,20 +374,22 @@ contract SRASharesTest is SRATestBase {
         vm.roll(_qEnd(0) + 1); // q0 posting window
         _postAs(oldOrch, 0, _fpv(100e18));
 
-        // governance replace(old -> new) inside q0's verification window (before binding)
+        // governance replaceWallet(old -> newWallet) inside q0's verification window (before binding)
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
         sra.replaceWallet(oldOrch, newOrch, "");
         vm.prank(owner2);
         sra.replaceWallet(oldOrch, newOrch, ""); // second vote executes (unanimousNoHold)
 
-        // submit q0 after binding: the old address's posted FilecoinPayVolume is still aggregated under the same identity
+        // submit q0 after binding: the posted FilecoinPayVolume is still aggregated under the same identity
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
         Share[] memory shares = rewardActor().getShares(SERVICE_ID);
         assertEq(shares.length, 1);
         assertEq(
-            _walletShare(shares, newOrch), 1e18, "historical FilecoinPayVolume follows the identity to the new wallet"
+            _walletShare(shares, newOrch),
+            1e18,
+            "historical FilecoinPayVolume stays with the identity; the share map pays the new wallet"
         );
         assertEq(_sumShares(shares), 1e18);
 
@@ -420,23 +422,24 @@ contract SRASharesTest is SRATestBase {
         assertEq(_sumShares(shares), 1e18);
     }
 
-    /// After replace, governance correctVolume must address the *new* wallet — the id-keyed model routes it to
-    /// the same identity, so a verification-window correction of the historical quarter hits the right FilecoinPayVolume record.
-    function test_Replace_CorrectVolume_NewAddress_CorrectsHistoricalQuarter() public {
+    /// After replaceWallet, correctVolume still addresses the *unchanged* identity (spec §3.2: the
+    /// orchestrator identity does not move) — a verification-window correction of the historical
+    /// quarter hits the right FilecoinPayVolume record.
+    function test_ReplaceWallet_CorrectVolume_IdentityUnchanged_CorrectsHistoricalQuarter() public {
         address oldOrch = makeAddr("cv-old");
         address newOrch = makeAddr("cv-new");
         _admit(oldOrch, oldOrch);
         vm.roll(_qEnd(0) + 1); // q0 posting window
         _postAs(oldOrch, 0, _fpv(100e18));
 
-        // replace within the verification window, then correct via the NEW address
+        // replaceWallet within the verification window, then correct via the unchanged identity
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
         sra.replaceWallet(oldOrch, newOrch, "");
         vm.prank(owner2);
         sra.replaceWallet(oldOrch, newOrch, ""); // second vote executes (unanimousNoHold)
 
-        _correctVolume(newOrch, 0, 200e18); // correction via the new wallet hits the same identity
+        _correctVolume(oldOrch, 0, 200e18); // correction via the identity (which did not move)
 
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);

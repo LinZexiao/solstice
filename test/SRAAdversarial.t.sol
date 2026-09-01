@@ -188,7 +188,7 @@ contract SRAAdversarial is SRATestBase {
         // owner1 was rotated out in favour of address(0)
         vm.prank(owner1);
         vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.NotOwner.selector, owner1));
-        sra.admit(makeAddr("orch-after-zero-rotation"));
+        sra.addOrchestrator(makeAddr("orch-after-zero-rotation"), makeAddr("orch-after-zero-rotation"));
     }
 
     /// reassignBinding to the zero address -> NotAdmitted(0) at body execution.

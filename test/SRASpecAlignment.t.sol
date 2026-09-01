@@ -378,7 +378,8 @@ contract SRASpecAlignmentTest is SRATestBase {
         assertTrue(sra.isAdmitted(b), "B unchanged");
     }
 
-    /// replaceWallet 的新 wallet 未被任何 admitted orchestrator 占用 → 成功。
+    /// replaceWallet 的新 wallet 未被任何 admitted orchestrator 占用 → 成功；spec §3.2 身份不动：
+    /// a 保持 admitted，wNew 只是新 payout wallet（不进入身份命名空间）。
     function test_ReplaceWallet_NonConflicting_Succeeds() public {
         address a = makeAddr("d7-nc-a");
         address b = makeAddr("d7-nc-b");
@@ -391,8 +392,8 @@ contract SRASpecAlignmentTest is SRATestBase {
         vm.prank(owner2);
         sra.replaceWallet(a, wNew, ""); // second vote executes -> no conflict
 
-        assertTrue(sra.isAdmitted(wNew));
-        assertFalse(sra.isAdmitted(a));
+        assertTrue(sra.isAdmitted(a), "identity does not move (spec 3.2)");
+        assertFalse(sra.isAdmitted(wNew), "the new wallet is not an orchestrator identity");
     }
 
     /// removed orchestrator 的 wallet 可复用（唯一性只约束 admitted orchestrators）。

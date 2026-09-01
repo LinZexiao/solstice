@@ -5,7 +5,7 @@ pragma solidity ^0.8.36;
 //
 //   - orchestrator admission/cap: 64-full rejection, Remove release (D2)
 //   - registerPairs: uniqueness, admission gating, re-claimable after Remove release
-//   - replace: operator identity transfer; reassignBinding: binding reassignment
+//   - replaceWallet: payout-wallet swap, identity does not move (spec §3.2); reassignBinding: binding reassignment
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
@@ -182,8 +182,9 @@ contract SRARegistryTest is SRATestBase {
     // replace / reassignBinding
     // ------------------------------------------------------------------------
 
-    /// replace transfers the operator identity (the new address gains admission and bindings; the old address becomes invalid).
-    function test_Replace_TransfersIdentity() public {
+    /// replaceWallet swaps the payout wallet (spec §3.2): the identity does not move — oldOrch stays
+    /// admitted, and the binding keeps resolving to the same orchestrator (its wallet now reads as newOrch).
+    function test_Replace_SwapsWallet() public {
         address oldOrch = makeAddr("oldOrch");
         address newOrch = makeAddr("newOrch");
         _admit(oldOrch, oldOrch);
@@ -192,7 +193,7 @@ contract SRARegistryTest is SRATestBase {
         pairs[0] = _pair(makeAddr("payer"), makeAddr("operator"));
         _registerPairsAs(oldOrch, pairs);
 
-        // governance replace(old, new): two votes; second executes (unanimousNoHold)
+        // governance replaceWallet(old, new): two votes; second executes (unanimousNoHold)
         bytes memory extradata = hex"deadbeef"; // co-signature payload (off-chain verified; emitted only)
         vm.prank(owner1);
         sra.replaceWallet(oldOrch, newOrch, extradata);
@@ -201,17 +202,17 @@ contract SRARegistryTest is SRATestBase {
         vm.prank(owner2);
         sra.replaceWallet(oldOrch, newOrch, extradata); // second vote executes (unanimousNoHold)
 
-        assertFalse(sra.isAdmitted(oldOrch));
-        assertTrue(sra.isAdmitted(newOrch));
-        // bindings follow the identity transfer
+        assertTrue(sra.isAdmitted(oldOrch), "identity does not move (spec 3.2)");
+        assertFalse(sra.isAdmitted(newOrch), "the new wallet is not an orchestrator identity");
+        // the binding stays with the same orchestrator; bindingOf reads its (now swapped) wallet
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), newOrch);
     }
 
     /// After replace, a third party cannot grab the binding pair — registerPairs's AlreadyBound
-    /// check resolves along the replace chain to the current valid orchestrator.
+    /// check resolves along the identity to the current wallet.
     function test_RegisterPairs_AfterReplace_ThirdPartyReverts() public {
         address orchA = makeAddr("orchA");
-        address orchB = makeAddr("orchB"); // fresh address: replace target must be unadmitted (auto-admitted on identity transfer)
+        address orchB = makeAddr("orchB"); // fresh address: the new payout wallet (identity stays at orchA)
         address orchC = makeAddr("orchC");
         _admit(orchA, orchA);
         _admit(orchC, orchC); // a third party must be admitted to reach the AlreadyBound check (registerPairs gating)
@@ -221,15 +222,15 @@ contract SRARegistryTest is SRATestBase {
         _registerPairsAs(orchA, pairs);
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchA);
 
-        // governance replace(orchA -> orchB): two votes + hold elapsed + third permissionless execution
+        // governance replaceWallet(orchA -> orchB): two votes; second executes (unanimousNoHold)
         vm.prank(owner1);
         sra.replaceWallet(orchA, orchB, "");
         vm.prank(owner2);
         sra.replaceWallet(orchA, orchB, ""); // second vote executes (unanimousNoHold)
 
-        assertTrue(sra.isAdmitted(orchB));
-        assertFalse(sra.isAdmitted(orchA));
-        // bindings follow the identity transfer (id-keyed: the wallet re-point keeps the binding)
+        assertTrue(sra.isAdmitted(orchA), "identity does not move (spec 3.2)");
+        assertFalse(sra.isAdmitted(orchB), "the new wallet is not an orchestrator identity");
+        // the binding stays with the same orchestrator; bindingOf reads its (now swapped) wallet
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchB);
 
         // third party orchC tries to grab the same pair -> expect AlreadyBound revert
@@ -265,19 +266,38 @@ contract SRARegistryTest is SRATestBase {
     // G6: failure-path closure (governance operations unanimous+hold: errors thrown at the third permissionless body execution)
     // ------------------------------------------------------------------------
 
-    /// G6: replace target already admitted (admitted=true) -> AlreadyAdmitted revert at the body execution.
-    /// (The replace tests cover the target-unadmitted + binding-transfer path; this test covers the "target already admitted" reverse branch)
-    function test_Replace_AlreadyAdmittedTarget_Reverts() public {
+    /// G6: the new wallet collides with any admitted orchestrator's wallet -> DuplicateWallet revert (D7 check).
+    /// (The identity-namespace AlreadyAdmitted check was dropped with spec §3.2 — wallet and identity are
+    /// decoupled; here newOrch is admitted with _admit(x,x) so its wallet == itself, colliding with the new wallet.)
+    function test_Replace_DuplicateWalletTarget_Reverts() public {
         address oldOrch = makeAddr("oldOrch");
         address newOrch = makeAddr("newOrch");
         _admit(oldOrch, oldOrch);
-        _admit(newOrch, newOrch); // target already admitted -> replace rejected
+        _admit(newOrch, newOrch); // admitted: its wallet == itself -> collides with the new wallet
 
         vm.prank(owner1);
         sra.replaceWallet(oldOrch, newOrch, ""); // vote 1 (approve)
-        vm.expectRevert(); // AlreadyAdmitted(newOrch)
+        vm.expectRevert(); // DuplicateWallet(newOrch)
         vm.prank(owner2);
         sra.replaceWallet(oldOrch, newOrch, ""); // vote 2 executes the body -> revert
+    }
+
+    /// G6: the new wallet equals another orchestrator's *identity* address (wallet/identity decoupled,
+    /// allowed by spec §3.2) -> succeeds, as long as the wallet field itself does not collide with
+    /// another orchestrator's wallet (the D7 check compares wallet fields).
+    function test_Replace_WalletEqualsOtherIdentity_Succeeds() public {
+        address oldOrch = makeAddr("oldOrch");
+        address orchB = makeAddr("orchB"); // another orchestrator's identity address
+        _admit(oldOrch, makeAddr("old-wallet")); // oldOrch's wallet is distinct
+        _admit(orchB, makeAddr("orchB-wallet")); // orchB's wallet is distinct ( != its identity address)
+
+        vm.prank(owner1);
+        sra.replaceWallet(oldOrch, orchB, ""); // new wallet = orchB (another identity's address)
+        vm.prank(owner2);
+        sra.replaceWallet(oldOrch, orchB, ""); // succeeds: the wallet collides with no other wallet
+
+        assertTrue(sra.isAdmitted(oldOrch), "identity does not move");
+        assertTrue(sra.isAdmitted(orchB), "orchB identity unaffected");
     }
 
     /// G6: reassignBinding target not admitted -> NotAdmitted revert at the body execution.
