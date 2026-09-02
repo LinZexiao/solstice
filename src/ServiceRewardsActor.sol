@@ -306,12 +306,12 @@ contract ServiceRewardsActor is UnanimousGovernance {
     function addOrchestrator(address orch, address wallet) external unanimousNoHold(keccak256(msg.data)) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         require(r.activeIdOf[orch] == 0, AlreadyAdmitted(orch));
+        require(r.admittedIds.length < MAX_ORCHESTRATORS, AtCapacity());
         // Wallet uniqueness: a wallet may belong to at most one admitted orchestrator (a removed
         // orchestrator's wallet is free — the check iterates admittedIds only, 64-cap keeps it cheap).
         for (uint256 i = 0; i < r.admittedIds.length; i++) {
             if (r.orchestrators[r.admittedIds[i]].wallet == wallet) revert DuplicateWallet(wallet);
         }
-        require(r.admittedIds.length < MAX_ORCHESTRATORS, AtCapacity());
         uint64 id = r.nextId;
         r.nextId = id + 1;
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
