@@ -318,6 +318,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         uint64 id = r.nextId;
         r.nextId = id + 1;
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
+        o.orchestrator = orch;
         o.wallet = wallet;
         o.admitted = true;
         o.admittedIndex = uint64(r.admittedIds.length);
@@ -424,17 +425,19 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      and still admitted) can be canceled; a removed orchestrator's binding already reads as unclaimed
     ///      under registerPairs semantics (spec §4.2), so canceling it is a no-op and reverts PairNotBound.
     ///      Claim and cancel stay mutually exclusive: registerPairs claims exactly when cancel reverts, and vice versa.
-    /// @dev The released orchestrator is carried in the event (three indexed args like BindingDeclared/
-    ///      BindingReassigned): after the delete, bindingOf returns 0, so without the orchestrator field an
-    ///      off-chain indexer could not tell who lost the binding.
+    /// @dev The released orchestrator identity is carried in the event (three indexed args, like
+    ///      BindingDeclared/BindingReassigned): after the delete, bindingOf returns 0, so without the
+    ///      identity field an off-chain indexer could not tell who lost the binding. The identity is
+    ///      read back from the id's OrchestratorInfo — the admit-time orchestrator, which does not
+    ///      move with replaceWallet — not the current payout wallet.
     function cancelBinding(address payer, address operator) external unanimousNoHold(keccak256(msg.data)) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         bytes32 pairId = _pairId(payer, operator);
         uint64 boundId = r.bindings[pairId];
         require(boundId != 0 && r.orchestrators[boundId].admitted, PairNotBound(pairId));
-        address orch = r.orchestrators[boundId].wallet;
+        address orchestrator = r.orchestrators[boundId].orchestrator;
         delete r.bindings[pairId];
-        emit BindingCanceled(payer, operator, orch);
+        emit BindingCanceled(payer, operator, orchestrator);
     }
 
     /// @notice Owner rotation, effective immediately (unanimousNoHold path,

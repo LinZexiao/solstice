@@ -466,10 +466,10 @@ contract SRARegistryTest is SRATestBase {
         id = uint64(uint256(vm.load(address(sra), wordSlot)) >> ((i % 4) * 64));
     }
 
-    /// @dev orchestrators mapping at REGISTRY_SLOT; struct word 3 = admittedIndex (added after prevFpv).
+    /// @dev orchestrators mapping at REGISTRY_SLOT; struct word 4 = admittedIndex (orchestrator field added in word 0 shifts it past prevFpv).
     function _admittedIndexOf(uint64 id) internal view returns (uint64 idx) {
         bytes32 base = keccak256(abi.encode(uint64(id), REGISTRY_SLOT));
-        idx = uint64(uint256(vm.load(address(sra), bytes32(uint256(base) + 3))));
+        idx = uint64(uint256(vm.load(address(sra), bytes32(uint256(base) + 4))));
     }
 
     /// OrchestratorInfo invariant: every admitted id's admittedIndex == its position in admittedIds.

@@ -14,9 +14,12 @@ pragma solidity ^0.8.36;
 // claim and cancel mutually exclusive on every pair: registerPairs claims exactly when cancel
 // reverts, and vice versa.
 //
-// The event carries the released orchestrator (three indexed args, like BindingDeclared/
-// BindingReassigned): after the delete, bindingOf returns 0, so without the orchestrator field an
-// off-chain indexer could not tell who lost the binding.
+// The event carries the released orchestrator identity (three indexed args, like BindingDeclared/
+// BindingReassigned): after the delete, bindingOf returns 0, so without the identity field an
+// off-chain indexer could not tell who lost the binding. The identity is the admit-time
+// orchestrator (the OrchestratorInfo reverse index, written once at addOrchestrator) — it does
+// not move with replaceWallet: cancel releases the binding right of that identity, not of its
+// replaceable payout wallet.
 
 import {SRATestBase} from "./SRATestBase.sol";
 import {ServiceRewardsActor} from "../src/ServiceRewardsActor.sol";
@@ -80,7 +83,8 @@ contract SRACancelBindingTest is SRATestBase {
         assertEq(sra.bindingOf(payer, operator), orchB);
     }
 
-    /// the release emits BindingCanceled(payer, operator, releasedOrchestrator) at the execution call.
+    /// the release emits BindingCanceled(payer, operator, admitIdentity) at the execution call
+    /// (here admitIdentity == orch == wallet; the distinct-wallet case is covered below).
     function test_CancelBinding_EmitsBindingCanceled() public {
         address orch = makeAddr("orch");
         _admit(orch, orch);
@@ -95,6 +99,58 @@ contract SRACancelBindingTest is SRATestBase {
         sra.cancelBinding(payer, operator);
         vm.expectEmit(true, true, true, false, address(sra));
         emit ServiceRewardsActor.BindingCanceled(payer, operator, orch);
+        vm.prank(owner2); // second approval executes immediately
+        sra.cancelBinding(payer, operator);
+    }
+
+    /// the third event arg is the *admit-time orchestrator identity*, not the payout wallet: a bound
+    /// pair whose orchestrator admitted a distinct wallet still emits the orchestrator at cancel —
+    /// releasing the binding releases the identity's binding right, and the wallet is only the
+    /// replaceable payout address.
+    function test_CancelBinding_EmitsIdentity_WhenWalletDiffersFromOrch() public {
+        address orch = makeAddr("orch");
+        address distinctWallet = makeAddr("distinct-wallet");
+        _admit(orch, distinctWallet);
+
+        address payer = makeAddr("payer");
+        address operator = makeAddr("operator");
+        Binding[] memory pairs = new Binding[](1);
+        pairs[0] = _pair(payer, operator);
+        _registerPairsAs(orch, pairs);
+
+        vm.prank(owner1);
+        sra.cancelBinding(payer, operator);
+        vm.expectEmit(true, true, true, false, address(sra));
+        emit ServiceRewardsActor.BindingCanceled(payer, operator, orch);
+        vm.prank(owner2); // second approval executes immediately
+        sra.cancelBinding(payer, operator);
+    }
+
+    /// the identity does not move with the payout wallet (spec §3.2): after replaceWallet re-points
+    /// the wallet, cancel still emits the *admit-time* orchestrator — the binding right stays with
+    /// the identity, not with whichever wallet currently receives payouts.
+    function test_CancelBinding_EmitsAdmitIdentity_AfterReplaceWallet() public {
+        address orch = makeAddr("orch");
+        address origWallet = makeAddr("orig-wallet");
+        address newWallet = makeAddr("new-wallet");
+        _admit(orch, origWallet);
+
+        address payer = makeAddr("payer");
+        address operator = makeAddr("operator");
+        Binding[] memory pairs = new Binding[](1);
+        pairs[0] = _pair(payer, operator);
+        _registerPairsAs(orch, pairs);
+
+        // governance wallet swap: identity and binding stay put, only the wallet field re-points
+        vm.prank(owner1);
+        sra.replaceWallet(orch, newWallet, "");
+        vm.prank(owner2);
+        sra.replaceWallet(orch, newWallet, ""); // second approval executes immediately
+
+        vm.prank(owner1);
+        sra.cancelBinding(payer, operator);
+        vm.expectEmit(true, true, true, false, address(sra));
+        emit ServiceRewardsActor.BindingCanceled(payer, operator, orch); // admit-time identity, not newWallet
         vm.prank(owner2); // second approval executes immediately
         sra.cancelBinding(payer, operator);
     }

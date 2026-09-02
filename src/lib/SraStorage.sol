@@ -5,9 +5,10 @@ import {FixedU18} from "./FixedU18.sol";
 
 library SraStorage {
     struct OrchestratorInfo {
+        address orchestrator; // admit-time identity; does not move with the wallet — 20B
         address wallet; // current effective wallet — 20B
         bool admitted; // admitted — 1B
-        // word 0: the two fields above pack into one 32B word (21B)
+        // word 0: orchestrator (20B); word 1: wallet + admitted pack into one 32B word (21B)
         FixedU18 fpv; // active quarter
         FixedU18 prevFpv; // previous quarter
         uint64 admittedIndex; // position in admittedIds
