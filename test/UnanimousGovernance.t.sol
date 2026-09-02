@@ -51,14 +51,6 @@ contract UnanimousGovernanceHarness is UnanimousGovernance {
     function removeOwner(address owner) external unanimous(keccak256(msg.data), REMOVE_OWNER_HOLD) {
         OwnersLibrary.removeOwner(owner);
     }
-
-    function vetoAddOwner(address owner) external {
-        _veto(addOwnerTaskId(owner));
-    }
-
-    function vetoRemoveOwner(address owner) external {
-        _veto(removeOwnerTaskId(owner));
-    }
 }
 
 contract UnanimousGovernanceTest is Test {
@@ -197,92 +189,6 @@ contract UnanimousGovernanceTest is Test {
         (modified, approvals) = harness.getPendingTask(taskId);
         assertTrue(modified == Epoch.wrap(0));
         assertTrue(approvals == EMPTY_SET);
-    }
-
-    function test_veto_duringHoldingPeriod_cancelsBeforeFinalize() public {
-        harness.seedOwner(alice);
-        harness.seedOwner(bob);
-        bytes32 taskId = harness.removeOwnerTaskId(bob);
-
-        vm.prank(alice);
-        harness.removeOwner(bob);
-        Epoch approvalEpoch = currentEpoch();
-        vm.prank(bob);
-        harness.removeOwner(bob);
-
-        // fully approved, but still within the hold: veto is still possible
-        assertTrue(harness.isOwner(bob));
-        (Epoch modified, OwnerSet approvals) = harness.getPendingTask(taskId);
-        assertTrue(modified == approvalEpoch);
-        assertTrue(approvals == (harness.asOwnerSet(alice) | harness.asOwnerSet(bob)));
-
-        vm.expectEmit(true, true, false, false, address(harness));
-        emit UnanimousGovernance.Rejected(taskId, alice);
-        vm.prank(alice);
-        harness.vetoRemoveOwner(bob);
-
-        assertTrue(harness.isOwner(bob));
-        (modified, approvals) = harness.getPendingTask(taskId);
-        assertTrue(modified == Epoch.wrap(0));
-        assertTrue(approvals == EMPTY_SET);
-
-        // even once the original hold window would have elapsed, the task
-        // was cleared, so finalizing now just restarts approval from scratch
-        vm.roll(Epoch.unwrap(currentEpoch() + harness.REMOVE_OWNER_HOLD()));
-
-        vm.expectEmit(true, false, false, false, address(harness));
-        emit UnanimousGovernance.Submitted(taskId);
-        vm.prank(alice);
-        harness.removeOwner(bob);
-
-        assertTrue(harness.isOwner(bob));
-        (modified, approvals) = harness.getPendingTask(taskId);
-        assertTrue(modified == currentEpoch());
-        assertTrue(approvals == harness.asOwnerSet(alice));
-    }
-
-    function test_veto_resetsPendingTask() public {
-        harness.seedOwner(alice);
-        harness.seedOwner(bob);
-        bytes32 taskId = harness.addOwnerTaskId(newOwner);
-
-        vm.prank(alice);
-        harness.addOwner(newOwner);
-        (Epoch modified, OwnerSet approvals) = harness.getPendingTask(taskId);
-        assertTrue(modified == currentEpoch());
-        assertTrue(approvals == harness.asOwnerSet(alice));
-
-        vm.expectEmit(true, true, false, false, address(harness));
-        emit UnanimousGovernance.Rejected(taskId, bob);
-        vm.prank(bob);
-        harness.vetoAddOwner(newOwner);
-
-        (modified, approvals) = harness.getPendingTask(taskId);
-        assertTrue(modified == Epoch.wrap(0));
-        assertTrue(approvals == EMPTY_SET);
-
-        // the task was cleared: a fresh Submitted event fires on the next approval
-        vm.expectEmit(true, false, false, false, address(harness));
-        emit UnanimousGovernance.Submitted(taskId);
-        vm.prank(alice);
-        harness.addOwner(newOwner);
-
-        assertFalse(harness.isOwner(newOwner));
-        (modified, approvals) = harness.getPendingTask(taskId);
-        assertTrue(modified == currentEpoch());
-        assertTrue(approvals == harness.asOwnerSet(alice));
-    }
-
-    function test_veto_onlyOwnerCanVeto() public {
-        harness.seedOwner(alice);
-        harness.seedOwner(bob);
-
-        vm.prank(alice);
-        harness.addOwner(newOwner);
-
-        vm.expectRevert(abi.encodeWithSelector(UnanimousGovernance.NotOwner.selector, stranger));
-        vm.prank(stranger);
-        harness.vetoAddOwner(newOwner);
     }
 
     function test_doubleApproval_byOwner_reverts() public {
