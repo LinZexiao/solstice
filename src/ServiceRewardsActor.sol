@@ -104,7 +104,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @param postPeriod posting window (epochs)
     /// @param verificationWindow verification window (epochs)
     /// @param activationEpoch end epoch of quarter 0 (window start)
-    /// @param upgradeHold SRA code-upgrade hold duration (epochs), fixed at deployment (spec 95eb9e0 §4.2)
+    /// @param upgradeHold SRA code-upgrade hold duration (epochs), fixed at deployment (spec 95eb9e0 §4.2);
+    ///        0 = no upgrade delay (legal semantics, useful in test deployments)
     constructor(
         address owner1,
         address owner2,
@@ -300,6 +301,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
     // ------------------------------------------------------------------------
 
     /// @notice Admits an orchestrator with its payout wallet; rejects when admitted total >= 64.
+    /// @dev A zero payout wallet is permitted (spec) but its share-map row is unclaimable in f02 —
+    ///      an admitted orchestrator with wallet == 0 contributes to the map but nobody can claim it.
     /// @dev Re-admit of a previously removed/replaced address allocates a fresh id — a fresh identity with no
     ///      bindings, FilecoinPayVolume, or history. Because ids are never reused and the address mapping (activeIdOf)
     ///      is cleared on remove/replace, there is no residual alias-chain or state to clean up.
@@ -362,6 +365,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     /// @notice Swaps the payout wallet (spec §3.2): the Orchestrator identity does not move — bindings,
     ///         accrued volumes, and contribution slots stay with the same orchestrator.
+    /// @dev A zero payout wallet is permitted (spec) but its share-map row is unclaimable in f02.
     /// @dev O(1) wallet re-point: only the id's wallet field changes. bindings/fpv state both key on
     ///      the id, so they keep resolving to the same orchestrator (the identity never moves), and
     ///      historical quarter FilecoinPayVolume remains aggregated.
@@ -459,6 +463,8 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///         only effect is the parameter event; the new values apply from the next quarter boundary
     ///         (off-chain indexer semantics, FIPs#1275). REGISTRATION_CUTOFF parameterizes the off-chain
     ///         late-claim guard (spec §2.2) as an epoch duration and is likewise event-only.
+    /// @dev registrationCutoff == 0 disables the off-chain late-claim guard (no cutoff window);
+    ///      degenerate values are accepted — the parameter is event-only, normalization is off-chain.
     function setPricingParams(
         uint256 minLotFloor,
         uint256 minLotAlphaNum,
