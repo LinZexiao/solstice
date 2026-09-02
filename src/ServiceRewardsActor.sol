@@ -15,6 +15,12 @@ pragma solidity ^0.8.36;
 // Storage: 2 ERC-7201 namespaces (Registry/Quarter),
 //       reusing Solstice.Owners (dual Safe) and Solstice.PendingTasks (governance queue).
 //       The allowlists are event-only (AdmittedListsUpdated is the authoritative snapshot).
+//
+// Governance: every method runs the dual-Safe unanimous path with no hold (unanimousNoHold) —
+// the second approval executes immediately. There is no veto/cleanup path: if the executing body
+// reverts, the first approval is stranded permanently (the task record is only deleted on
+// execution; a half-approved task can never be re-approved). The second Safe MUST dry-run the
+// calldata before approving.
 
 import {Epoch, currentEpoch} from "./lib/Epoch.sol";
 import {FixedU18, ONE, ZERO} from "./lib/FixedU18.sol";
