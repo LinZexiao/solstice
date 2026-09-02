@@ -186,10 +186,10 @@ contract SRARegistryTest is SRATestBase {
     // ------------------------------------------------------------------------
 
     /// replaceWallet swaps the payout wallet (spec §3.2): the identity does not move — oldOrch stays
-    /// admitted, and the binding keeps resolving to the same orchestrator (its wallet now reads as newOrch).
+    /// admitted, and the binding keeps resolving to the same orchestrator (its wallet now reads as newWallet).
     function test_Replace_SwapsWallet() public {
         address oldOrch = makeAddr("oldOrch");
-        address newOrch = makeAddr("newOrch");
+        address newWallet = makeAddr("newWallet");
         _admit(oldOrch, oldOrch);
 
         Binding[] memory pairs = new Binding[](1);
@@ -199,16 +199,16 @@ contract SRARegistryTest is SRATestBase {
         // governance replaceWallet(old, new): two votes; second executes (unanimousNoHold)
         bytes memory extradata = hex"deadbeef"; // co-signature payload (off-chain verified; emitted only)
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newOrch, extradata);
+        sra.replaceWallet(oldOrch, newWallet, extradata);
         vm.expectEmit(true, true, false, true, address(sra));
-        emit ServiceRewardsActor.OrchestratorWalletReplaced(oldOrch, newOrch, extradata);
+        emit ServiceRewardsActor.OrchestratorWalletReplaced(oldOrch, newWallet, extradata);
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newOrch, extradata); // second vote executes (unanimousNoHold)
+        sra.replaceWallet(oldOrch, newWallet, extradata); // second vote executes (unanimousNoHold)
 
         assertTrue(sra.isAdmitted(oldOrch), "identity does not move (spec 3.2)");
-        assertFalse(sra.isAdmitted(newOrch), "the new wallet is not an orchestrator identity");
+        assertFalse(sra.isAdmitted(newWallet), "the new wallet is not an orchestrator identity");
         // the binding stays with the same orchestrator; bindingOf reads its (now swapped) wallet
-        assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), newOrch);
+        assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), newWallet);
     }
 
     /// After replace, a third party cannot grab the binding pair — registerPairs's AlreadyBound
@@ -271,18 +271,18 @@ contract SRARegistryTest is SRATestBase {
 
     /// G6: the new wallet collides with any admitted orchestrator's wallet -> DuplicateWallet revert (D7 check).
     /// (The identity-namespace AlreadyAdmitted check was dropped with spec §3.2 — wallet and identity are
-    /// decoupled; here newOrch is admitted with _admit(x,x) so its wallet == itself, colliding with the new wallet.)
+    /// decoupled; here newWallet is admitted with _admit(x,x) so its wallet == itself, colliding with the new wallet.)
     function test_Replace_DuplicateWalletTarget_Reverts() public {
         address oldOrch = makeAddr("oldOrch");
-        address newOrch = makeAddr("newOrch");
+        address newWallet = makeAddr("newWallet");
         _admit(oldOrch, oldOrch);
-        _admit(newOrch, newOrch); // admitted: its wallet == itself -> collides with the new wallet
+        _admit(newWallet, newWallet); // admitted: its wallet == itself -> collides with the new wallet
 
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newOrch, ""); // vote 1 (approve)
-        vm.expectRevert(); // DuplicateWallet(newOrch)
+        sra.replaceWallet(oldOrch, newWallet, ""); // vote 1 (approve)
+        vm.expectRevert(); // DuplicateWallet(newWallet)
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newOrch, ""); // vote 2 executes the body -> revert
+        sra.replaceWallet(oldOrch, newWallet, ""); // vote 2 executes the body -> revert
     }
 
     /// G6: the new wallet equals another orchestrator's *identity* address (wallet/identity decoupled,
@@ -352,13 +352,13 @@ contract SRARegistryTest is SRATestBase {
     /// (G6 covered the "target already admitted" reverse branch; old unadmitted was uncovered — coverage line 396)
     function test_Replace_OldNotAdmitted_Reverts() public {
         address stranger = makeAddr("stranger"); // old address never admitted
-        address newOrch = makeAddr("newOrch");
+        address newWallet = makeAddr("newWallet");
 
         vm.prank(owner1);
-        sra.replaceWallet(stranger, newOrch, ""); // vote 1 (approve)
+        sra.replaceWallet(stranger, newWallet, ""); // vote 1 (approve)
         vm.expectRevert(); // NotAdmitted(stranger)
         vm.prank(owner2);
-        sra.replaceWallet(stranger, newOrch, ""); // vote 2 executes the body -> revert
+        sra.replaceWallet(stranger, newWallet, ""); // vote 2 executes the body -> revert
     }
 
     /// Strategy 5/CV7: the orchestratorCount read-only view reflects admission/removal counts (consistent with admittedCount).

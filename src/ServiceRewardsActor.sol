@@ -58,7 +58,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     event OrchestratorAdmitted(address indexed orch, address wallet);
     event OrchestratorRemoved(address indexed orch, string reason);
-    event OrchestratorWalletReplaced(address indexed oldOrch, address indexed newOrch, bytes extradata);
+    event OrchestratorWalletReplaced(address indexed oldOrch, address indexed newWallet, bytes extradata);
     event BindingDeclared(address indexed payer, address indexed operator, address indexed orchestrator);
     event BindingReassigned(
         address indexed payer, address indexed operator, address indexed orchestrator, bool inherit
@@ -357,7 +357,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     /// @dev extradata carries the Orchestrator's co-signature (old-wallet rotation or new-wallet liveness proof,
     ///      spec §4.2) and is not parsed here: Filecoin signatures cannot be verified in Solidity, so the payload
     ///      is recorded verbatim for off-chain verification and correction disputes.
-    function replaceWallet(address oldOrch, address newOrch, bytes calldata extradata)
+    function replaceWallet(address oldOrch, address newWallet, bytes calldata extradata)
         external
         unanimousNoHold(keccak256(msg.data))
     {
@@ -368,14 +368,14 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // is excluded — its own wallet is being superseded, not duplicated).
         for (uint256 i = 0; i < r.admittedIds.length; i++) {
             uint64 otherId = r.admittedIds[i];
-            if (otherId != id && r.orchestrators[otherId].wallet == newOrch) revert DuplicateWallet(newOrch);
+            if (otherId != id && r.orchestrators[otherId].wallet == newWallet) revert DuplicateWallet(newWallet);
         }
 
-        r.orchestrators[id].wallet = newOrch;
+        r.orchestrators[id].wallet = newWallet;
         // Immediate wallet-swap push: the id's share stays (prospective — identity and accrued do not
         // move), only the map's wallet for this id is replaced (spec §3.2). Snapshot id→share unchanged.
-        _pushWalletSwap(id, newOrch);
-        emit OrchestratorWalletReplaced(oldOrch, newOrch, extradata);
+        _pushWalletSwap(id, newWallet);
+        emit OrchestratorWalletReplaced(oldOrch, newWallet, extradata);
     }
 
     /// @notice Disputed pair reassignment; volume is credited to the new orchestrator from the change epoch onward (spec §4.2).
