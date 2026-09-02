@@ -179,6 +179,11 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      bound quarter, so keying on the latest ended quarter cannot deadlock there either.
     function _pendingSharesQuarter() internal view returns (bool hasPending, uint64 q) {
         SraStorage.SraStorageQuarter storage qt = SraStorage.quarter();
+        // Pre-activation (possible in test environments; the contract itself starts at
+        // ACTIVATION_EPOCH): no quarter has ever ended, so nothing can be pending. The _quarterOf
+        // saturation would otherwise read quarter 0 as an ended quarter awaiting its map
+        // (nextQuarter 0 != nowQ+1 1) and block removal.
+        if (currentEpoch() < ACTIVATION_EPOCH) return (false, 0);
         // The ended-quarter status is a *time* property: derive it from the clock via _quarterOf,
         // not from the activeQ cache — the cache advances only on writes, so a gap quarter (ended
         // but unwritten) would be missed (activeQ still the previous quarter) and removal would

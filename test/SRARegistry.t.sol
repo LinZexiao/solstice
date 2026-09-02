@@ -70,6 +70,20 @@ contract SRARegistryTest is SRATestBase {
         assertEq(sra.admittedCount(), 64);
     }
 
+    /// Pre-activation removal succeeds: setUp leaves block.number (≈ 1 + SWA_TIMELOCK) below
+    /// ACTIVATION_EPOCH, where no quarter has ever ended. The §3.2 guard must not block — nothing
+    /// can be pending before activation (removal touches only the admitted set).
+    function test_Remove_PreActivation_Succeeds() public {
+        assertLt(block.number, ACTIVATION_EPOCH, "setUp must leave the contract pre-activation");
+        address orch = makeAddr("pre-act");
+        _admit(orch, orch);
+
+        _remove(orch, "");
+
+        assertFalse(sra.isAdmitted(orch));
+        assertEq(sra.admittedCount(), 0);
+    }
+
     // ------------------------------------------------------------------------
     // registerPairs (strategy 3)
     // ------------------------------------------------------------------------
