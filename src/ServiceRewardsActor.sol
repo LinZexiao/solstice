@@ -617,10 +617,17 @@ contract ServiceRewardsActor is UnanimousGovernance {
         return uint64(SraStorage.registry().admittedIds.length); // MAX_ORCHESTRATORS bound keeps this < 2^64
     }
 
+    /// @notice Payout wallet of the orchestrator bound to (payer, operator); address(0) when the pair
+    ///         is unbound or the bound orchestrator has been removed (spec §4.2: removal releases
+    ///         bindings). Ambiguity: an admitted orchestrator with a zero payout wallet also reads 0,
+    ///         indistinguishable from unbound — the registry view is authoritative for admission.
     function bindingOf(address payer, address operator) external view returns (address) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.bindings[_pairId(payer, operator)];
-        return id == 0 ? address(0) : r.orchestrators[id].wallet; // unbound (0) -> address(0); bound id -> current wallet
+        // removed ids keep their audit wallet but are no longer admitted: the binding is released,
+        // so the pair must read as unclaimed (mirrors registerPairs's removed-as-unclaimed view)
+        if (id == 0 || !r.orchestrators[id].admitted) return address(0);
+        return r.orchestrators[id].wallet;
     }
 
     function fpvOf(uint64 q, address orch) external view returns (FilecoinPayVolume memory) {

@@ -545,8 +545,9 @@ contract SRAInvariantTest is Test {
     /// a replace re-points the resolved wallet while the identity stays put).
     /// Catches: a third-party grab of the same pair after replace (overwriting the binding),
     ///        registerPairs bypassing the uniqueness check, reassignBinding writes inconsistent with the record.
-    /// Unclaimed pairs (binder removed or identity superseded) are skipped: their binding may still read
-    /// the removed id's retained audit wallet, which the record no longer tracks.
+    /// Unclaimed pairs (binder removed or identity superseded) are skipped: bindingOf returns 0 for a
+    /// removed id (admitted=false) and the record tracks a superseded identity's pairs as unclaimed,
+    /// so the resolved value is address(0) on both sides of the comparison.
     function invariant_OneBindingPerPair() public view {
         uint256 n = handler.knownPairsLength();
         for (uint256 i = 0; i < n; i++) {

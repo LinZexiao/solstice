@@ -173,6 +173,9 @@ contract SRARegistryTest is SRATestBase {
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
         _remove(orchA, "");
 
+        // released binding reads as unclaimed immediately (bindingOf returns 0 for a removed id)
+        assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), address(0));
+
         // original orchestrator removed; B can claim the same pair
         _registerPairsAs(orchB, pairs);
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchB);
