@@ -10,6 +10,7 @@ via_ir = false
 optimizer = true
 optimizer_runs = 2000
 bytecode_hash = "none"
+cbor_metadata = false
 
 # For dependencies
 remappings = [
