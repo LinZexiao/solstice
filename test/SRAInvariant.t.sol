@@ -7,8 +7,9 @@ pragma solidity ^0.8.36;
 //   I1 Share conservation: after any operation sequence (the most recent successful submitShares),
 //      the f02 share map Σ is always == 1e18
 //   I2 Binding uniqueness: any (payer, operator) pair always has at most 1 valid bound orchestrator;
-//      the handler-recorded last binder (resolved along the replace chain) must == sra.bindingOf()
-//      — a third-party grab after replace is exactly the kind of invariant this breaks
+//      the handler-recorded last binder must == sra.bindingOf() (bindings resolve to the admit-time
+//      identity, which a replaceWallet does not move) — a third-party grab after replace is exactly
+//      the kind of invariant this breaks
 //   I3 Governance consistency: the approved bitmask is consistent with orchestrator state —
 //      parked tasks (one vote, not executed) have a non-zero bitmask and state not landed;
 //      executed tasks have a zeroed bitmask (deleted after execution); handler-expected state == sra actual
@@ -56,10 +57,6 @@ contract SRAInvariantHandler is SRATestBase {
     ///      identify which id holds a binding; the generation disambiguates it (replace re-points the *current*
     ///      generation's pairs only).
     mapping(address => uint256) internal _idGen;
-    /// @dev current payout wallet per identity (spec §3.2 ReplaceWallet: identity does not move, only the
-    ///      wallet re-points). Bound records resolve through this map — bindingOf reads orchestrators[id].wallet,
-    ///      so after a replace the binding still resolves to the new wallet while the identity stays put.
-    mapping(address => address) internal _idWallet;
     uint256 internal _genSeq;
 
     // ---- pair pool and binding records ----
@@ -124,7 +121,6 @@ contract SRAInvariantHandler is SRATestBase {
         _admitted[orch] = true;
         _genSeq++;
         _idGen[orch] = _genSeq; // fresh identity generation (re-admit = new id)
-        _idWallet[orch] = orch; // a fresh identity's payout wallet is the address itself
         _recordExecuted(taskId);
     }
 
@@ -149,8 +145,8 @@ contract SRAInvariantHandler is SRATestBase {
     }
 
     /// @notice Payout-wallet swap (spec §3.2): the orchestrator identity does not move — only the id's
-    ///         wallet is re-pointed, so every current-generation pair bound to it resolves to the new
-    ///         wallet (bindingOf reads orchestrators[id].wallet). _admitted / _idGen stay unchanged.
+    ///         wallet is re-pointed, so every current-generation pair bound to it keeps resolving to the
+    ///         same identity (bindingOf reads orchestrators[id].orchestrator). _admitted / _idGen stay unchanged.
     function replace(uint256 oldIdx, uint256 newIdx) external {
         address oldOrch = _pickOrch(oldIdx);
         address newWallet = _pickOrch(newIdx);
@@ -164,10 +160,9 @@ contract SRAInvariantHandler is SRATestBase {
         sra.replaceWallet(oldOrch, newWallet);
         vm.prank(owner2);
         sra.replaceWallet(oldOrch, newWallet); // second vote executes (unanimousNoHold)
-        // wallet swap: the id keeps its identity (spec §3.2); the handler re-points the wallet map and
-        // leaves every bound record's identity untouched — bindingOf resolves through _idWallet, so all
-        // current-generation pairs bound to the id read the new wallet automatically.
-        _idWallet[oldOrch] = newWallet;
+        // wallet swap: the id keeps its identity (spec §3.2); nothing on the identity side re-points —
+        // bindingOf resolves to the admit-time identity, so all current-generation pairs bound to the
+        // id keep reading the same orchestrator.
         _recordExecuted(taskId);
     }
 
@@ -314,7 +309,6 @@ contract SRAInvariantHandler is SRATestBase {
                 _admitted[orch] = true;
                 _genSeq++;
                 _idGen[orch] = _genSeq; // fresh identity generation
-                _idWallet[orch] = orch;
                 _parkedTarget[orch] = false;
                 _recordExecuted(taskId);
             } catch {
@@ -384,15 +378,15 @@ contract SRAInvariantHandler is SRATestBase {
         return (_pairs[i].payer, _pairs[i].operator, _pairs[i].boundOrch);
     }
 
-    /// @dev The wallet a live bound record resolves to (the binder identity's current wallet); address(0)
-    ///      when the pair is unclaimed — binder removed or its identity superseded by a re-admit. The
-    ///      identity generation distinguishes a live binding from a stale one (an address can host
-    ///      successive identities), and the wallet map resolves the current payout wallet after replaces.
-    function liveBoundWallet(uint256 i) external view returns (address) {
+    /// @dev The identity a live bound record resolves to (its admit-time orchestrator); address(0) when
+    ///      the pair is unclaimed — binder removed or its identity superseded by a re-admit. The identity
+    ///      generation distinguishes a live binding from a stale one (an address can host successive
+    ///      identities); a live record's bound id resolves to the current generation's identity.
+    function liveBoundIdentity(uint256 i) external view returns (address) {
         PairRecord storage p = _pairs[i];
         if (!_admitted[p.boundOrch]) return address(0);
         if (_idGen[p.boundOrch] != p.gen) return address(0);
-        return _idWallet[p.boundOrch];
+        return p.boundOrch;
     }
 
     function parkedCount() external view returns (uint256) {
@@ -540,9 +534,9 @@ contract SRAInvariantTest is Test {
         assertEq(sum + handler.lastStrippedBurn(), 1e18, "I1: sum of shares must equal SHARE_TOTAL");
     }
 
-    /// I2 Binding uniqueness: every live pair's bindingOf must == the handler-recorded binder's current
-    /// wallet (resolved through the identity's wallet map — bindingOf reads orchestrators[id].wallet, so
-    /// a replace re-points the resolved wallet while the identity stays put).
+    /// I2 Binding uniqueness: every live pair's bindingOf must == the handler-recorded binder's identity
+    /// (bindingOf reads orchestrators[id].orchestrator, the admit-time identity — a replace re-points
+    /// only the wallet, so the bound identity stays put).
     /// Catches: a third-party grab of the same pair after replace (overwriting the binding),
     ///        registerPairs bypassing the uniqueness check, reassignBinding writes inconsistent with the record.
     /// Unclaimed pairs (binder removed or identity superseded) are skipped: bindingOf returns 0 for a
@@ -552,7 +546,7 @@ contract SRAInvariantTest is Test {
         uint256 n = handler.knownPairsLength();
         for (uint256 i = 0; i < n; i++) {
             (address payer, address operator,) = handler.pairRecordAt(i);
-            address expected = handler.liveBoundWallet(i);
+            address expected = handler.liveBoundIdentity(i);
             if (expected == address(0)) continue; // unclaimed pair — skip
             assertEq(
                 handler.sraInstance().bindingOf(payer, operator),
