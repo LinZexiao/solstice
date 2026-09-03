@@ -211,13 +211,12 @@ contract SRARegistryTest is SRATestBase {
         _registerPairsAs(oldOrch, pairs);
 
         // governance replaceWallet(old, new): two votes; second executes (unanimousNoHold)
-        bytes memory extradata = hex"deadbeef"; // co-signature payload (off-chain verified; emitted only)
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newWallet, extradata);
+        sra.replaceWallet(oldOrch, newWallet);
         vm.expectEmit(true, true, false, true, address(sra));
-        emit ServiceRewardsActor.OrchestratorWalletReplaced(oldOrch, newWallet, extradata);
+        emit ServiceRewardsActor.OrchestratorWalletReplaced(oldOrch, newWallet);
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newWallet, extradata); // second vote executes (unanimousNoHold)
+        sra.replaceWallet(oldOrch, newWallet); // second vote executes (unanimousNoHold)
 
         assertTrue(sra.isAdmitted(oldOrch), "identity does not move (spec 3.2)");
         assertFalse(sra.isAdmitted(newWallet), "the new wallet is not an orchestrator identity");
@@ -241,9 +240,9 @@ contract SRARegistryTest is SRATestBase {
 
         // governance replaceWallet(orchA -> orchB): two votes; second executes (unanimousNoHold)
         vm.prank(owner1);
-        sra.replaceWallet(orchA, orchB, "");
+        sra.replaceWallet(orchA, orchB);
         vm.prank(owner2);
-        sra.replaceWallet(orchA, orchB, ""); // second vote executes (unanimousNoHold)
+        sra.replaceWallet(orchA, orchB); // second vote executes (unanimousNoHold)
 
         assertTrue(sra.isAdmitted(orchA), "identity does not move (spec 3.2)");
         assertFalse(sra.isAdmitted(orchB), "the new wallet is not an orchestrator identity");
@@ -293,10 +292,10 @@ contract SRARegistryTest is SRATestBase {
         _admit(newWallet, newWallet); // admitted: its wallet == itself -> collides with the new wallet
 
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newWallet, ""); // vote 1 (approve)
+        sra.replaceWallet(oldOrch, newWallet); // vote 1 (approve)
         vm.expectRevert(); // DuplicateWallet(newWallet)
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newWallet, ""); // vote 2 executes the body -> revert
+        sra.replaceWallet(oldOrch, newWallet); // vote 2 executes the body -> revert
     }
 
     /// G6: the new wallet equals another orchestrator's *identity* address (wallet/identity decoupled,
@@ -309,9 +308,9 @@ contract SRARegistryTest is SRATestBase {
         _admit(orchB, makeAddr("orchB-wallet")); // orchB's wallet is distinct ( != its identity address)
 
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, orchB, ""); // new wallet = orchB (another identity's address)
+        sra.replaceWallet(oldOrch, orchB); // new wallet = orchB (another identity's address)
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, orchB, ""); // succeeds: the wallet collides with no other wallet
+        sra.replaceWallet(oldOrch, orchB); // succeeds: the wallet collides with no other wallet
 
         assertTrue(sra.isAdmitted(oldOrch), "identity does not move");
         assertTrue(sra.isAdmitted(orchB), "orchB identity unaffected");
@@ -369,10 +368,10 @@ contract SRARegistryTest is SRATestBase {
         address newWallet = makeAddr("newWallet");
 
         vm.prank(owner1);
-        sra.replaceWallet(stranger, newWallet, ""); // vote 1 (approve)
+        sra.replaceWallet(stranger, newWallet); // vote 1 (approve)
         vm.expectRevert(); // NotAdmitted(stranger)
         vm.prank(owner2);
-        sra.replaceWallet(stranger, newWallet, ""); // vote 2 executes the body -> revert
+        sra.replaceWallet(stranger, newWallet); // vote 2 executes the body -> revert
     }
 
     /// Strategy 5/CV7: the orchestratorCount read-only view reflects admission/removal counts (consistent with admittedCount).

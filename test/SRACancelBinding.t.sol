@@ -143,9 +143,9 @@ contract SRACancelBindingTest is SRATestBase {
 
         // governance wallet swap: identity and binding stay put, only the wallet field re-points
         vm.prank(owner1);
-        sra.replaceWallet(orch, newWallet, "");
+        sra.replaceWallet(orch, newWallet);
         vm.prank(owner2);
-        sra.replaceWallet(orch, newWallet, ""); // second approval executes immediately
+        sra.replaceWallet(orch, newWallet); // second approval executes immediately
 
         vm.prank(owner1);
         sra.cancelBinding(payer, operator);

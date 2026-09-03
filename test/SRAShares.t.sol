@@ -377,9 +377,9 @@ contract SRASharesTest is SRATestBase {
         // governance replaceWallet(old -> newWallet) inside q0's verification window (before binding)
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newWallet, "");
+        sra.replaceWallet(oldOrch, newWallet);
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newWallet, ""); // second vote executes (unanimousNoHold)
+        sra.replaceWallet(oldOrch, newWallet); // second vote executes (unanimousNoHold)
 
         // submit q0 after binding: the posted FilecoinPayVolume is still aggregated under the same identity
         _rollTo(_qVerifyEnd(0) + 1);
@@ -410,9 +410,9 @@ contract SRASharesTest is SRATestBase {
         // replace(old -> new) inside the verification window
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newWallet, "");
+        sra.replaceWallet(oldOrch, newWallet);
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newWallet, ""); // second vote executes (unanimousNoHold)
+        sra.replaceWallet(oldOrch, newWallet); // second vote executes (unanimousNoHold)
 
         _rollTo(_qVerifyEnd(0) + 1);
         sra.submitShares(0);
@@ -435,9 +435,9 @@ contract SRASharesTest is SRATestBase {
         // replaceWallet within the verification window, then correct via the unchanged identity
         vm.roll(_qPostEnd(0) + 1);
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newWallet, "");
+        sra.replaceWallet(oldOrch, newWallet);
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newWallet, ""); // second vote executes (unanimousNoHold)
+        sra.replaceWallet(oldOrch, newWallet); // second vote executes (unanimousNoHold)
 
         _correctVolume(oldOrch, 0, 200e18); // correction via the identity (which did not move)
 
@@ -566,9 +566,9 @@ contract SRASharesTest is SRATestBase {
 
         // replace after submit (no guard): swap old -> new in the live map
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newWallet, "rotation");
+        sra.replaceWallet(oldOrch, newWallet);
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newWallet, "rotation");
+        sra.replaceWallet(oldOrch, newWallet);
 
         Share[] memory afterMap = rewardActor().getShares(SERVICE_ID);
         assertEq(_walletShare(afterMap, newWallet), oldShare, "share moved to the new wallet at the same value");

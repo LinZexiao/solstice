@@ -369,10 +369,10 @@ contract SRASpecAlignmentTest is SRATestBase {
         _admit(b, wB); // B's wallet is the distinct address wB
 
         vm.prank(owner1);
-        sra.replaceWallet(a, wB, ""); // vote 1 (approve)
+        sra.replaceWallet(a, wB); // vote 1 (approve)
         vm.prank(owner2);
         vm.expectRevert(); // vote 2 executes the body -> wB conflicts with B's wallet
-        sra.replaceWallet(a, wB, "");
+        sra.replaceWallet(a, wB);
 
         assertTrue(sra.isAdmitted(a), "A unchanged");
         assertTrue(sra.isAdmitted(b), "B unchanged");
@@ -388,9 +388,9 @@ contract SRASpecAlignmentTest is SRATestBase {
         _admit(b, b);
 
         vm.prank(owner1);
-        sra.replaceWallet(a, wNew, "");
+        sra.replaceWallet(a, wNew);
         vm.prank(owner2);
-        sra.replaceWallet(a, wNew, ""); // second vote executes -> no conflict
+        sra.replaceWallet(a, wNew); // second vote executes -> no conflict
 
         assertTrue(sra.isAdmitted(a), "identity does not move (spec 3.2)");
         assertFalse(sra.isAdmitted(wNew), "the new wallet is not an orchestrator identity");

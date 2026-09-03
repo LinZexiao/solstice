@@ -159,11 +159,11 @@ contract SRAInvariantHandler is SRATestBase {
         // identity itself (_admit(x, x)), so a duplicate would revert DuplicateWallet (D7).
         if (!sra.isAdmitted(oldOrch) || sra.isAdmitted(newWallet)) return;
         if (_parkedTarget[newWallet]) return; // must not preempt a parked governance target (I3)
-        bytes32 taskId = _taskId(sra.replaceWallet.selector, abi.encode(oldOrch, newWallet, ""));
+        bytes32 taskId = _taskId(sra.replaceWallet.selector, abi.encode(oldOrch, newWallet));
         vm.prank(owner1);
-        sra.replaceWallet(oldOrch, newWallet, "");
+        sra.replaceWallet(oldOrch, newWallet);
         vm.prank(owner2);
-        sra.replaceWallet(oldOrch, newWallet, ""); // second vote executes (unanimousNoHold)
+        sra.replaceWallet(oldOrch, newWallet); // second vote executes (unanimousNoHold)
         // wallet swap: the id keeps its identity (spec §3.2); the handler re-points the wallet map and
         // leaves every bound record's identity untouched — bindingOf resolves through _idWallet, so all
         // current-generation pairs bound to the id read the new wallet automatically.

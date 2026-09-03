@@ -78,9 +78,9 @@ contract SRAggregateMirrorTest is SRATestBase {
         _postAs(b, 0, _fpv(200e18));
 
         vm.prank(owner1);
-        sra.replaceWallet(a, a2, "");
+        sra.replaceWallet(a, a2);
         vm.prank(owner2);
-        sra.replaceWallet(a, a2, ""); // second vote executes (unanimousNoHold) — still inside posting window
+        sra.replaceWallet(a, a2); // second vote executes (unanimousNoHold) — still inside posting window
 
         vm.roll(_qVerifyEnd(0) + 1);
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18); // inherited — no deduction
