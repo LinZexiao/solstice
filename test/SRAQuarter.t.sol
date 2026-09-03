@@ -274,12 +274,13 @@ contract SRAQuarterTest is SRATestBase {
         for (uint256 i = 0; i < logs.length; i++) {
             if (logs[i].topics[0] != topic) continue;
             hits++;
-            (uint256 f, uint256 an, uint256 ad, uint256 b) =
-                abi.decode(logs[i].data, (uint256, uint256, uint256, uint256));
+            (uint256 f, uint256 an, uint256 ad, uint256 b, uint256 cutoff) =
+                abi.decode(logs[i].data, (uint256, uint256, uint256, uint256, uint256));
             assertEq(f, 2e18);
             assertEq(an, 1);
             assertEq(ad, 400);
             assertEq(b, 1500); // 15%
+            assertEq(cutoff, 20160);
         }
         assertEq(hits, 1, "PricingParamsUpdated emitted once");
     }
