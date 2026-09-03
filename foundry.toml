@@ -17,6 +17,15 @@ remappings = [
     'fvm-solidity/=lib/fvm-solidity/src/',
 ]
 
+# Fast invariant campaign for local iteration; CI overrides with FOUNDRY_PROFILE=ci.
+[profile.default.invariant]
+runs = 16
+depth = 64
+
+[profile.ci.invariant]
+runs = 256
+depth = 500
+
 [lint]
 severity = ["high", "med", "low", "info", "gas", "code-size"]
 exclude_lints = [
