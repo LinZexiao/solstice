@@ -16,8 +16,7 @@ import {
     REMOVE_STREAM,
     SET_DISTRIBUTION,
     CANCEL_PENDING,
-    CLAIM,
-    SWA_TIMELOCK
+    CLAIM
 } from "../../src/lib/FVMRewardMethod.sol";
 import {WeightRecord, DistributionKind, Share, PendingOp} from "../../src/lib/FVMRewardTypes.sol";
 import {Epoch} from "../../src/lib/Epoch.sol";
@@ -35,6 +34,11 @@ uint64 constant FIRST_EXPORTED_METHOD_NUMBER = 1 << 24;
 
 /// @dev Same value as WAD, typed uint256, so summing shares needs no signed-to-unsigned cast.
 uint256 constant SHARE_TOTAL = 1e18;
+
+/// @dev Mainnet value of f02's activation timelock (swa_timelock_epochs): 7 days at 30s/epoch.
+/// Networks deploy their own value (devnet/calibnet compress it), so StreamWeightActor takes its
+/// hold as a constructor parameter; tests deploy the mainnet value to exercise the real boundary.
+uint64 constant MAINNET_TIMELOCK = 20160;
 
 struct LedgerRow {
     address wallet;
@@ -196,7 +200,7 @@ contract FVMRewardActor {
 
     /// @notice Test helper: sets the defaults an inline initializer would give this contract; call once, right after etching.
     function mockInit() external {
-        swaTimelockEpochs = SWA_TIMELOCK;
+        swaTimelockEpochs = MAINNET_TIMELOCK;
         nextTransitionEpoch = type(uint64).max;
     }
 

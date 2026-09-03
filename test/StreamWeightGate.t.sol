@@ -10,7 +10,7 @@ import {Epoch} from "../src/lib/Epoch.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {GateParams, VolumeTarget} from "../src/lib/GateParams.sol";
 import {UnanimousGovernance} from "../src/lib/UnanimousGovernance.sol";
-import {SWA_TIMELOCK} from "../src/lib/FVMRewardMethod.sol";
+import {MAINNET_TIMELOCK} from "./mocks/FVMRewardActor.sol";
 
 /// @dev ERC-7201 storage slot of GateParamsInfo (src/lib/GateParams.sol: Solstice.GateParams).
 ///     GateParamsInfo layout: {uint64 lastCheckedQuarter; GateParams params;}, where params is
@@ -67,15 +67,23 @@ contract StreamWeightGateTest is StreamWeightActorTest {
     }
 
     /// @dev Reads the ERC-7201 GateParamsInfo slot the SWA's own GateParamsLibrary writes.
+    function _storedGateParamsAt(address target)
+        internal
+        view
+        returns (uint256 base, uint256 stepRatio, uint64 steps, uint64 lastCheckedQuarter)
+    {
+        base = uint256(vm.load(target, bytes32(uint256(GATE_PARAMS_SLOT) + 1)));
+        stepRatio = uint256(vm.load(target, bytes32(uint256(GATE_PARAMS_SLOT) + 2)));
+        steps = uint64(uint256(vm.load(target, bytes32(uint256(GATE_PARAMS_SLOT) + 3))));
+        lastCheckedQuarter = uint64(uint256(vm.load(target, GATE_PARAMS_SLOT)));
+    }
+
     function _storedGateParams()
         internal
         view
         returns (uint256 base, uint256 stepRatio, uint64 steps, uint64 lastCheckedQuarter)
     {
-        base = uint256(vm.load(address(actor), bytes32(uint256(GATE_PARAMS_SLOT) + 1)));
-        stepRatio = uint256(vm.load(address(actor), bytes32(uint256(GATE_PARAMS_SLOT) + 2)));
-        steps = uint64(uint256(vm.load(address(actor), bytes32(uint256(GATE_PARAMS_SLOT) + 3))));
-        lastCheckedQuarter = uint64(uint256(vm.load(address(actor), GATE_PARAMS_SLOT)));
+        return _storedGateParamsAt(address(actor));
     }
 
     // -------------------------------------------------------------------------
@@ -119,15 +127,15 @@ contract StreamWeightGateTest is StreamWeightActorTest {
         assertEq(steps, 0);
 
         // < HOLD: permissionless execution still gated.
-        vm.roll(modified + SWA_TIMELOCK - 1);
+        vm.roll(modified + MAINNET_TIMELOCK - 1);
         vm.prank(makeAddr("stranger"));
         vm.expectRevert(
-            abi.encodeWithSelector(UnanimousGovernance.HoldUntil.selector, Epoch.wrap(modified + SWA_TIMELOCK))
+            abi.encodeWithSelector(UnanimousGovernance.HoldUntil.selector, Epoch.wrap(modified + MAINNET_TIMELOCK))
         );
         actor.setGateParams(params);
 
         // == HOLD (exact boundary): execution becomes permissionless and the new params land.
-        vm.roll(modified + SWA_TIMELOCK);
+        vm.roll(modified + MAINNET_TIMELOCK);
         vm.prank(makeAddr("stranger"));
         actor.setGateParams(params);
 
@@ -135,6 +143,48 @@ contract StreamWeightGateTest is StreamWeightActorTest {
         assertEq(base, 4000 ether);
         assertEq(stepRatio, 2.7 ether);
         assertEq(steps, 1);
+    }
+
+    /// @dev The hold is a per-deployment constructor parameter: a second actor built with a
+    ///      compressed hold completes its gate update at its own boundary while the mainnet-hold
+    ///      actor from setUp stays gated until its full 20160 epochs elapse.
+    function test_SetGateParams_HoldIsPerDeploymentParam() public {
+        GateParams memory params = _gateParams(4000 ether, 2.7 ether, 1);
+        uint64 shortHold = 100;
+
+        IServiceRewardsActor sra = _sraMock(); // same mocked address parent setUp used for QUARTER
+        StreamWeightActor shortActor = new StreamWeightActor(owner1, owner2, sra, Epoch.wrap(shortHold));
+
+        // Unanimous votes on both actors at the same epoch.
+        vm.startPrank(owner1);
+        actor.setGateParams(params);
+        shortActor.setGateParams(params);
+        vm.stopPrank();
+        vm.startPrank(owner2);
+        actor.setGateParams(params);
+        shortActor.setGateParams(params);
+        vm.stopPrank();
+        uint64 modified = uint64(block.number); // second vote's epoch
+
+        // shortActor's boundary (== shortHold) reached: its update lands permissionless, while
+        // the mainnet-hold actor remains gated until its own hold elapses.
+        vm.roll(modified + shortHold);
+        vm.prank(makeAddr("stranger"));
+        shortActor.setGateParams(params);
+
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(
+            abi.encodeWithSelector(UnanimousGovernance.HoldUntil.selector, Epoch.wrap(modified + MAINNET_TIMELOCK))
+        );
+        actor.setGateParams(params);
+
+        (uint256 shortBase,, uint64 shortSteps,) = _storedGateParamsAt(address(shortActor));
+        assertEq(shortBase, 4000 ether, "compressed-hold actor applied params at its own boundary");
+        assertEq(shortSteps, 1);
+
+        (uint256 base,, uint64 steps,) = _storedGateParams();
+        assertEq(base, 3500 ether, "mainnet-hold actor untouched before its own hold elapses");
+        assertEq(steps, 0);
     }
 
     /// @dev An approval not yet unanimous keeps the task in owner-only territory: a stranger cannot
@@ -171,7 +221,7 @@ contract StreamWeightGateTest is StreamWeightActorTest {
 
         // The step is queued to f02 as an uncancellable STEP_WEIGHT write and lands once the
         // mock's own timelock elapses: floor/vStart/cap = (0+3) * STEP, tStart = qEnd(2).
-        vm.roll(block.number + SWA_TIMELOCK);
+        vm.roll(block.number + MAINNET_TIMELOCK);
         rewardActor().mockSettle();
         (uint256 b, uint256 r, uint64 s,) = _storedGateParams();
         assertEq(b, 3500 ether);
@@ -213,7 +263,7 @@ contract StreamWeightGateTest is StreamWeightActorTest {
     function test_QuarterlyGateCheck_StepsComplete_Reverts() public {
         GateParams memory done = _gateParams(3500 ether, 2.7 ether, 8);
         _submitGateParams(done);
-        vm.roll(block.number + SWA_TIMELOCK);
+        vm.roll(block.number + MAINNET_TIMELOCK);
         actor.setGateParams(done);
 
         (,, uint64 steps,) = _storedGateParams();
