@@ -101,7 +101,7 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         vm.roll(_qVerifyEnd(0) + 1); // q0 binds
         sra.submitShares(0); // guard lifts
-        _remove(a, ""); // post-binding removal: the aggregate is a binding snapshot, not rewritten
+        _remove(a); // post-binding removal: the aggregate is a binding snapshot, not rewritten
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18);
     }
 
@@ -224,10 +224,10 @@ contract SRAggregateMirrorTest is SRATestBase {
         // lag window: q=0 bound, submitShares(0) not yet called -> the second vote (which executes
         // the body under unanimousNoHold) hits the guard and reverts; the first approval persists.
         vm.prank(owner1);
-        sra.removeOrchestrator(b, ""); // vote 1 (approve)
+        sra.removeOrchestrator(b); // vote 1 (approve)
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PendingShares.selector, 1));
         vm.prank(owner2);
-        sra.removeOrchestrator(b, ""); // vote 2 executes the body: ended q1 awaits its share map -> guard reverts (vote rolls back)
+        sra.removeOrchestrator(b); // vote 2 executes the body: ended q1 awaits its share map -> guard reverts (vote rolls back)
 
         // crank the pending quarters — q0 then q1 (both ended, q1's map holds a's correction) —
         // then the same unanimous task completes on the second vote.
@@ -237,7 +237,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         vm.roll(_qVerifyEnd(1) + 1); // q1 binds
         sra.submitShares(1); // q1 submitted (map = [a]; b's q1 fpv is zero)
         vm.prank(owner2);
-        sra.removeOrchestrator(b, ""); // second vote again: full vote now executes, guard cleared
+        sra.removeOrchestrator(b); // second vote again: full vote now executes, guard cleared
         assertEq(sra.isAdmitted(b), false, "removed after the pending quarters are cleared");
     }
 
@@ -262,22 +262,22 @@ contract SRAggregateMirrorTest is SRATestBase {
         // (body execution) reverts; the first approval persists.
         vm.roll(_qEnd(1) + 1);
         vm.prank(owner1);
-        sra.removeOrchestrator(b, ""); // vote 1 (approve)
+        sra.removeOrchestrator(b); // vote 1 (approve)
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PendingShares.selector, 1));
         vm.prank(owner2);
-        sra.removeOrchestrator(b, ""); // vote 2 executes the body: guard reverts
+        sra.removeOrchestrator(b); // vote 2 executes the body: guard reverts
 
         // q1 verification window (E(1)+POST+1): still before binding, still pending -> reverts again.
         vm.roll(_qPostEnd(1) + 1);
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PendingShares.selector, 1));
         vm.prank(owner2);
-        sra.removeOrchestrator(b, ""); // the persisted first approval + this second vote executes: guard reverts
+        sra.removeOrchestrator(b); // the persisted first approval + this second vote executes: guard reverts
 
         // q1 binds and submits — guard lifts; the same task completes on the next second vote.
         vm.roll(_qVerifyEnd(1) + 1);
         sra.submitShares(1);
         vm.prank(owner2);
-        sra.removeOrchestrator(b, ""); // second vote again: full vote now executes, guard cleared
+        sra.removeOrchestrator(b); // second vote again: full vote now executes, guard cleared
         assertEq(sra.isAdmitted(b), false, "removed after q1 submitted");
     }
 
@@ -302,10 +302,10 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         // Time-derived latest bound = 1 (unsubmitted) -> the second vote (body execution) reverts.
         vm.prank(owner1);
-        sra.removeOrchestrator(b, ""); // vote 1 (approve)
+        sra.removeOrchestrator(b); // vote 1 (approve)
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PendingShares.selector, 1));
         vm.prank(owner2);
-        sra.removeOrchestrator(b, ""); // vote 2 executes the body: gap-quarter pending -> guard reverts
+        sra.removeOrchestrator(b); // vote 2 executes the body: gap-quarter pending -> guard reverts
     }
 
     /// @dev share of a wallet in the map (0 if absent).
@@ -371,10 +371,10 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         // q0 ended and awaits its share map -> the second vote (body execution) reverts.
         vm.prank(owner1);
-        sra.removeOrchestrator(b, ""); // vote 1 (approve)
+        sra.removeOrchestrator(b); // vote 1 (approve)
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PendingShares.selector, 0));
         vm.prank(owner2);
-        sra.removeOrchestrator(b, ""); // vote 2 executes the body: guard reverts
+        sra.removeOrchestrator(b); // vote 2 executes the body: guard reverts
     }
 
     /// Once the verification window closes, AggregatedFilecoinPayVolume(activeQ) is a fixed binding
@@ -405,7 +405,7 @@ contract SRAggregateMirrorTest is SRATestBase {
         assertGt(aShare, 0, "a holds a share");
         assertGt(bShare, 0, "b holds a share");
 
-        _remove(b, ""); // post-binding removal: aggregate is a binding snapshot, must not drift
+        _remove(b); // post-binding removal: aggregate is a binding snapshot, must not drift
         assertEq(FixedU18.unwrap(sra.aggregatedFilecoinPayVolume(0)), 300e18, "bound aggregate unchanged after removal");
         shares = rewardActor().getShares(SERVICE_ID);
         // b's entry was repointed to f099 (stripped from storage): only a's share remains stored,
@@ -432,10 +432,10 @@ contract SRAggregateMirrorTest is SRATestBase {
 
         vm.roll(_qPostEnd(0) + 1); // Q0 verification window (E+POST+1)
         vm.prank(owner1);
-        sra.removeOrchestrator(b, ""); // vote 1 (approve)
+        sra.removeOrchestrator(b); // vote 1 (approve)
         vm.expectRevert(abi.encodeWithSelector(ServiceRewardsActor.PendingShares.selector, 0));
         vm.prank(owner2);
-        sra.removeOrchestrator(b, ""); // vote 2 executes the body: guard reverts
+        sra.removeOrchestrator(b); // vote 2 executes the body: guard reverts
     }
 
     /// A gap quarter (no writes, zero volume) submits as an all-zero no-op — the mirror

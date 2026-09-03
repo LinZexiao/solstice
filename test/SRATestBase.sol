@@ -124,11 +124,11 @@ contract SRATestBase is MockRewardTest {
     }
 
     /// @notice removeOrchestrator uses unanimousNoHold: the second vote executes, no roll needed.
-    function _remove(address orch, string memory reason) internal {
+    function _remove(address orch) internal {
         vm.prank(owner1);
-        sra.removeOrchestrator(orch, reason);
+        sra.removeOrchestrator(orch);
         vm.prank(owner2);
-        sra.removeOrchestrator(orch, reason);
+        sra.removeOrchestrator(orch);
     }
 
     /// @dev Binds and submits quarter 0 to lift the spec §3.2 remove guard in tests that exercise

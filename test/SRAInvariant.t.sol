@@ -139,11 +139,11 @@ contract SRAInvariantHandler is SRATestBase {
         for (uint64 qq = 0; qq <= MAX_Q; qq++) {
             _crankSubmitShares(qq);
         }
-        bytes32 taskId = _taskId(sra.removeOrchestrator.selector, abi.encode(orch, ""));
+        bytes32 taskId = _taskId(sra.removeOrchestrator.selector, abi.encode(orch));
         vm.prank(owner1);
-        sra.removeOrchestrator(orch, "");
+        sra.removeOrchestrator(orch);
         vm.prank(owner2);
-        sra.removeOrchestrator(orch, ""); // second vote executes (unanimousNoHold)
+        sra.removeOrchestrator(orch); // second vote executes (unanimousNoHold)
         _admitted[orch] = false;
         _recordExecuted(taskId);
     }

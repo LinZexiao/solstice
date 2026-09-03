@@ -63,7 +63,7 @@ contract SRARegistryTest is SRATestBase {
         }
         address removed = makeAddr("orch-0");
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(removed, "");
+        _remove(removed);
         assertEq(sra.admittedCount(), 63);
 
         _admit(makeAddr("orch-new"), makeAddr("orch-new")); // slot freed, can admit
@@ -78,7 +78,7 @@ contract SRARegistryTest is SRATestBase {
         address orch = makeAddr("pre-act");
         _admit(orch, orch);
 
-        _remove(orch, "");
+        _remove(orch);
 
         assertFalse(sra.isAdmitted(orch));
         assertEq(sra.admittedCount(), 0);
@@ -185,7 +185,7 @@ contract SRARegistryTest is SRATestBase {
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), orchA);
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(orchA, "");
+        _remove(orchA);
 
         // released binding reads as unclaimed immediately (bindingOf returns 0 for a removed id)
         assertEq(sra.bindingOf(makeAddr("payer"), makeAddr("operator")), address(0));
@@ -337,10 +337,10 @@ contract SRARegistryTest is SRATestBase {
     function test_Remove_NotAdmitted_Reverts() public {
         address stranger = makeAddr("stranger");
         vm.prank(owner1);
-        sra.removeOrchestrator(stranger, ""); // vote 1 (approve)
+        sra.removeOrchestrator(stranger); // vote 1 (approve)
         vm.expectRevert(); // NotAdmitted(stranger)
         vm.prank(owner2);
-        sra.removeOrchestrator(stranger, ""); // vote 2 executes the body -> revert
+        sra.removeOrchestrator(stranger); // vote 2 executes the body -> revert
     }
 
     // ------------------------------------------------------------------------
@@ -387,7 +387,7 @@ contract SRARegistryTest is SRATestBase {
         assertEq(sra.orchestratorCount(), sra.admittedCount()); // view consistency
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(a, "");
+        _remove(a);
         assertEq(sra.orchestratorCount(), 1);
     }
 
@@ -413,7 +413,7 @@ contract SRARegistryTest is SRATestBase {
         _postAs(oldOrch, 0, _fpv(100e18));
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(oldOrch, "");
+        _remove(oldOrch);
         assertFalse(sra.isAdmitted(oldOrch));
 
         // re-admit the same address: fresh identity
@@ -441,7 +441,7 @@ contract SRARegistryTest is SRATestBase {
         assertEq(uint64(uint256(vm.load(address(sra), slot))), 2, "first admit consumes id 1");
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(a, "");
+        _remove(a);
         _admit(a, a); // re-admit allocates a NEW id (never reused)
         assertEq(uint64(uint256(vm.load(address(sra), slot))), 3, "re-admit allocates a fresh id");
 
@@ -491,7 +491,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(c, c); // ids 1, 2, 3
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(b, ""); // remove middle (id 2): list [1, 3] — id 3 swapped into position 1
+        _remove(b); // remove middle (id 2): list [1, 3] — id 3 swapped into position 1
 
         assertEq(_admittedIdsLength(), 2);
         assertEq(_admittedIdAt(0), 1);
@@ -510,7 +510,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(b, b); // ids 1, 2
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(b, ""); // remove last (id 2): list [1]
+        _remove(b); // remove last (id 2): list [1]
 
         assertEq(_admittedIdsLength(), 1);
         assertEq(_admittedIdAt(0), 1);
@@ -531,17 +531,17 @@ contract SRARegistryTest is SRATestBase {
         _admit(d, d); // ids 1, 2, 3, 4
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(a, ""); // head: list [4, 2, 3]
+        _remove(a); // head: list [4, 2, 3]
         assertEq(_admittedIndexOf(4), 0, "head removal swaps last to front");
         assertEq(_admittedIndexOf(1), 0, "removed id's admittedIndex cleared (dead pointer)");
         _assertIndexConsistent();
 
-        _remove(c, ""); // middle: list [4, 2]
+        _remove(c); // middle: list [4, 2]
         assertEq(_admittedIndexOf(2), 1, "middle removal swaps last to slot 1");
         assertEq(_admittedIndexOf(3), 0, "removed id's admittedIndex cleared (dead pointer)");
         _assertIndexConsistent();
 
-        _remove(b, ""); // last: list [4]
+        _remove(b); // last: list [4]
         assertEq(_admittedIndexOf(2), 0, "removed id's admittedIndex cleared (dead pointer)");
         _assertIndexConsistent();
 
@@ -559,7 +559,7 @@ contract SRARegistryTest is SRATestBase {
         _admit(b, b); // ids 1, 2; list [1, 2]
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(b, ""); // list [1] (length 1)
+        _remove(b); // list [1] (length 1)
         assertEq(_admittedIndexOf(2), 0, "removed id's admittedIndex cleared (dead pointer)");
 
         address c = makeAddr("readmit-c");

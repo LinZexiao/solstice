@@ -404,7 +404,7 @@ contract SRASpecAlignmentTest is SRATestBase {
         _admit(a, w);
 
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(a, "");
+        _remove(a);
 
         _admit(c, w); // removed orchestrator's wallet is reusable
         assertTrue(sra.isAdmitted(c));
@@ -419,7 +419,7 @@ contract SRASpecAlignmentTest is SRATestBase {
             );
         }
         _crankQuarter0(); // lift the §3.2 remove guard (q0 bound + submitted)
-        _remove(makeAddr("d7-cap-0"), "");
+        _remove(makeAddr("d7-cap-0"));
         assertEq(sra.admittedCount(), 63);
 
         address d = makeAddr("d7-cap-new");

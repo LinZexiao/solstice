@@ -475,7 +475,7 @@ contract SRASharesTest is SRATestBase {
         assertEq(before.length, 2, "both contributors in the bound map");
         uint256 bShare = _walletShare(before, b);
 
-        _remove(b, "misreport"); // post-submit removal binds immediately
+        _remove(b); // post-submit removal binds immediately
 
         Share[] memory afterMap = rewardActor().getShares(SERVICE_ID);
         assertEq(afterMap.length, 1, "removed entry repointed to f099 leaves the stored map");
@@ -508,12 +508,12 @@ contract SRASharesTest is SRATestBase {
         uint256 bShare = _walletShare(before, b);
         uint256 cShare = _walletShare(before, c);
 
-        _remove(b, "");
+        _remove(b);
         Share[] memory after1 = rewardActor().getShares(SERVICE_ID);
         assertEq(after1.length, 2, "b removed -> two stored entries");
         assertEq(rewardActor().strippedBurnOf(SERVICE_ID), bShare, "first remove strips b's share");
 
-        _remove(c, "");
+        _remove(c);
         Share[] memory after2 = rewardActor().getShares(SERVICE_ID);
         assertEq(after2.length, 1, "c removed -> one stored entry");
         assertEq(rewardActor().strippedBurnOf(SERVICE_ID), bShare + cShare, "stripped burn accumulates across removes");
@@ -541,7 +541,7 @@ contract SRASharesTest is SRATestBase {
         Share[] memory initial = rewardActor().getShares(SERVICE_ID);
         assertEq(initial.length, 1, "no-op submit leaves the initial map");
 
-        _remove(b, "");
+        _remove(b);
         Share[] memory afterRemove = rewardActor().getShares(SERVICE_ID);
         assertEq(afterRemove.length, 1, "remove without snapshot does not push");
         assertEq(_walletShare(afterRemove, address(sra)), 1e18, "initial map untouched");

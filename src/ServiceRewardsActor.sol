@@ -64,7 +64,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     Epoch public immutable sraUpgradeHold;
 
     event OrchestratorAdmitted(address indexed orch, address wallet);
-    event OrchestratorRemoved(address indexed orch, string reason);
+    event OrchestratorRemoved(address indexed orch);
     event OrchestratorWalletReplaced(address indexed oldOrch, address indexed newWallet);
     event BindingDeclared(address indexed payer, address indexed operator, address indexed orchestrator);
     event BindingReassigned(
@@ -338,7 +338,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
     ///      by cranking SubmitShares first, then removes in a later message.
     /// @dev The id record is kept (wallet/fpv/prevFpv retained for audit); only the address mapping is
     ///      cleared, so a removed id is never reachable from an address and its pairs read as unclaimed.
-    function removeOrchestrator(address orch, string calldata reason) external unanimousNoHold(keccak256(msg.data)) {
+    function removeOrchestrator(address orch) external unanimousNoHold(keccak256(msg.data)) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.activeIdOf[orch];
         SraStorage.OrchestratorInfo storage o = r.orchestrators[id];
@@ -362,7 +362,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         // (spec §2.4.4; a removal cannot bind inside an ended-quarter window, so the snapshot is the
         // last submitted map and the push keeps Σ==1e18).
         _pushRemovedToBurn(id);
-        emit OrchestratorRemoved(orch, reason);
+        emit OrchestratorRemoved(orch);
     }
 
     /// @notice Swaps the payout wallet (spec §3.2): the Orchestrator identity does not move — bindings,
