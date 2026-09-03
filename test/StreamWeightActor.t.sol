@@ -4,14 +4,13 @@ pragma solidity ^0.8.36;
 import {USR_FORBIDDEN, USR_ILLEGAL_ARGUMENT, USR_NOT_FOUND} from "fvm-solidity/FVMErrors.sol";
 
 import {MockRewardTest} from "./mocks/MockRewardTest.sol";
-import {WAD} from "./mocks/FVMRewardActor.sol";
+import {WAD, MAINNET_TIMELOCK} from "./mocks/FVMRewardActor.sol";
 import {StreamWeightActor} from "../src/StreamWeightActor.sol";
 import {IServiceRewardsActor} from "../src/interfaces/IServiceRewardsActor.sol";
 import {PendingOp, Share, WeightRecord, WeightRecordUpdate} from "../src/lib/FVMRewardTypes.sol";
 import {Epoch} from "../src/lib/Epoch.sol";
 import {FixedU18} from "../src/lib/FixedU18.sol";
 import {FVMRewards} from "../src/lib/FVMRewards.sol";
-import {SWA_TIMELOCK} from "../src/lib/FVMRewardMethod.sol";
 
 contract StreamWeightActorTest is MockRewardTest {
     StreamWeightActor actor;
@@ -33,7 +32,8 @@ contract StreamWeightActorTest is MockRewardTest {
             sra, abi.encodeWithSelector(IServiceRewardsActor.EPOCHS_PER_QUARTER.selector), abi.encode(TEST_QUARTER)
         );
 
-        actor = new StreamWeightActor(owner1, owner2, IServiceRewardsActor(sra));
+        // mainnet hold: StreamWeightGate tests exercise the timelock boundary at MAINNET_TIMELOCK
+        actor = new StreamWeightActor(owner1, owner2, IServiceRewardsActor(sra), Epoch.wrap(MAINNET_TIMELOCK));
         rewardActor().mockSwa(address(actor));
     }
 
@@ -46,7 +46,7 @@ contract StreamWeightActorTest is MockRewardTest {
     }
 
     function _activation() internal view returns (uint64) {
-        return uint64(block.number) + SWA_TIMELOCK;
+        return uint64(block.number) + MAINNET_TIMELOCK;
     }
 
     function _shares() internal pure returns (Share[] memory shares) {
@@ -70,7 +70,7 @@ contract StreamWeightActorTest is MockRewardTest {
         actor.registerStream(id, _record(0.1e18), WRITER, _shares(), _activation());
         vm.prank(owner2);
         actor.registerStream(id, _record(0.1e18), WRITER, _shares(), _activation());
-        vm.roll(block.number + SWA_TIMELOCK);
+        vm.roll(block.number + MAINNET_TIMELOCK);
     }
 
     // -------------------------------------------------------------------------
