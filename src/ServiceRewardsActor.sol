@@ -630,16 +630,9 @@ contract ServiceRewardsActor is UnanimousGovernance {
         return uint64(SraStorage.registry().admittedIds.length); // MAX_ORCHESTRATORS bound keeps this < 2^64
     }
 
-    /// @notice Identity address of the orchestrator bound to (payer, operator); address(0) when the
-    ///         pair is unbound or the bound orchestrator has been removed (spec §4.2: removal
-    ///         releases bindings). The admit-time identity is returned, not the payout wallet —
-    ///         replaceWallet (spec §3.2) re-points only the wallet, so the bound identity keeps
-    ///         resolving to the same orchestrator.
     function bindingOf(address payer, address operator) external view returns (address) {
         SraStorage.SraStorageRegistry storage r = SraStorage.registry();
         uint64 id = r.bindings[_pairId(payer, operator)];
-        // removed ids keep their audit record but are no longer admitted: the binding is released,
-        // so the pair must read as unclaimed (mirrors registerPairs's removed-as-unclaimed view)
         if (id == 0 || !r.orchestrators[id].admitted) return address(0);
         return r.orchestrators[id].orchestrator;
     }

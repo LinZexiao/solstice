@@ -27,9 +27,7 @@ contract StreamWeightActor is UnanimousGovernance {
     /// @param owner1 First owner.
     /// @param owner2 Second owner.
     /// @param sra Service Rewards Actor supplying QUARTER and gating `quarterlyGateCheck`.
-    /// @param hold Timelock applied to unanimous `setGateParams` updates (epochs), fixed at
-    ///        deployment; per-network value (mainnet 20160 = 7 days at 30s/epoch; devnet/calibnet
-    ///        compress it). 0 = no delay (executes on unanimity).
+    /// @param hold Timelock applied to `setGateParams` updates
     constructor(address owner1, address owner2, IServiceRewardsActor sra, Epoch hold) {
         owner1.addOwner();
         owner2.addOwner();

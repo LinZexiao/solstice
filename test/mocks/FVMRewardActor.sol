@@ -35,9 +35,6 @@ uint64 constant FIRST_EXPORTED_METHOD_NUMBER = 1 << 24;
 /// @dev Same value as WAD, typed uint256, so summing shares needs no signed-to-unsigned cast.
 uint256 constant SHARE_TOTAL = 1e18;
 
-/// @dev Mainnet value of f02's activation timelock (swa_timelock_epochs): 7 days at 30s/epoch.
-/// Networks deploy their own value (devnet/calibnet compress it), so StreamWeightActor takes its
-/// hold as a constructor parameter; tests deploy the mainnet value to exercise the real boundary.
 uint64 constant MAINNET_TIMELOCK = 20160;
 
 struct LedgerRow {
@@ -259,8 +256,7 @@ contract FVMRewardActor {
         return _streams[streamId].shares;
     }
 
-    /// @notice Test helper: the f099 share total stripped from the last SetShares (f02 does not
-    ///      store f099 rows, spec §2.4.4); stored + stripped == 1e18 whenever the last push was valid.
+    /// @notice Test helper: the f099 share total stripped from the last SetShares
     function strippedBurnOf(uint64 streamId) external view returns (uint256) {
         return _streams[streamId].strippedBurn;
     }
@@ -1289,9 +1285,6 @@ contract FVMRewardActor {
         }
     }
 
-    /// @dev Copies non-f099 rows into storage; returns the stripped f099 share total so callers can
-    ///      record it (f02 stores the map with f099 rows removed, spec §2.4.4 — the burn slice is
-    ///      settled at award time, not stored as a recipient).
     function _pushNonBurnShares(Share[] storage target, Share[] memory shares) internal returns (uint256 stripped) {
         for (uint256 i = 0; i < shares.length; i++) {
             if (shares[i].wallet != BURN_ADDRESS) target.push(shares[i]);
