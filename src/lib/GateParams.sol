@@ -19,6 +19,10 @@ struct GateParams {
 using GateParamsLibrary for GateParams global;
 
 library GateParamsLibrary {
+    /// @dev Maximum gate steps the params may carry: (W2_CAP - W2_BASE) / W2_STEP = (0.50 - 0.10) / 0.05
+    ///      = 8 (FIP-0118 §3.1.1 setGateParams bounds). Steps at the cap land w2 on W2_CAP and are legal.
+    uint64 internal constant GATE_STEPS = 8;
+
     /// @custom:storage-location erc7201:Solstice.GateParams
     struct GateParamsInfo {
         uint64 lastCheckedQuarter;

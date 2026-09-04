@@ -118,8 +118,24 @@ contract StreamWeightActor is UnanimousGovernance {
         newOwner.addOwner();
     }
 
+    /// @notice Cancels a pending unanimous task before it executes (held gate updates, partial
+    /// approvals). Owner-only; lets either multisig withdraw a submission.
+    /// @param taskId The pending task's identifier, usually keccak256(msg.data) of its submission.
+    function veto(bytes32 taskId) external {
+        _veto(taskId);
+    }
+
     /// @notice All 8 gate steps have already been taken.
     error StepsComplete();
+
+    /// @notice Gate params exceed the gate count: steps must be at most GATE_STEPS.
+    error StepsOutOfRange();
+
+    /// @notice A quarterly gate check consumed one quarter and reports whether the gate passed.
+    /// @dev Emitted on every check: `passed=true` means SERVICE_ID was stepped (steps carries the
+    ///      post-step count); `passed=false` means the volume cleared nothing. Shape pending #37;
+    ///      further fields, if any, append as non-indexed parameters.
+    event QuarterlyGateCheckResult(uint64 indexed quarter, bool passed, uint64 steps);
 
     /// @notice Advances the quarterly gate by one quarter, stepping SERVICE_ID's weight schedule
     /// if the elapsed quarter's aggregated FilecoinPayVolume cleared the next volume threshold.
@@ -127,7 +143,7 @@ contract StreamWeightActor is UnanimousGovernance {
     function quarterlyGateCheck() external {
         GateParamsLibrary.GateParamsInfo storage gateParamsInfo = GateParamsLibrary.getGateParamsSlot();
         GateParams memory loaded = gateParamsInfo.params;
-        require(loaded.steps < 8, StepsComplete());
+        require(loaded.steps < GateParamsLibrary.GATE_STEPS, StepsComplete());
 
         uint64 quarter = ++gateParamsInfo.lastCheckedQuarter;
         // NOTE this will enforce afterBinding()
@@ -145,13 +161,19 @@ contract StreamWeightActor is UnanimousGovernance {
             updates[0].record.slope = 0;
 
             gateParamsInfo.params.steps++;
+            emit QuarterlyGateCheckResult(quarter, true, gateParamsInfo.params.steps);
             FVMRewards.stepWeightRecords(updates);
+        } else {
+            emit QuarterlyGateCheckResult(quarter, false, loaded.steps);
         }
     }
 
     /// @notice Overwrites the quarterly gate's parameters; has a HOLD-epoch timelock after unanimity.
+    /// @dev The bound runs where params land (execution inside the unanimous modifier): an
+    ///      out-of-range task can sit pending but never completes, and an owner vetoes it.
     /// @param params New volume target and step state.
     function setGateParams(GateParams calldata params) external unanimous(keccak256(msg.data), HOLD) {
+        require(params.steps <= GateParamsLibrary.GATE_STEPS, StepsOutOfRange());
         GateParamsLibrary.getGateParamsSlot().params = params;
     }
 }
