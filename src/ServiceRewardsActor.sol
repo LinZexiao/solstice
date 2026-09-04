@@ -17,11 +17,10 @@ pragma solidity ^0.8.36;
 //       The allowlists are event-only (AdmittedListsUpdated is the authoritative snapshot).
 //
 // Governance: every method runs the dual-Safe unanimous path with no hold (unanimousNoHold) —
-// the second approval executes immediately. There is no veto/cleanup path: a task clears only
-// when its body executes without reverting. If the body reverts, the whole approval transaction
-// rolls back (record deletion included), so the task stays pending and the second owner can
-// re-approve the same calldata — a failed run strands nothing. The second Safe MUST dry-run the
-// calldata before approving.
+// the second approval executes immediately. A task clears only when its body executes without
+// reverting. If the body reverts, the whole approval transaction rolls back (record deletion
+// included), so the task stays pending and the second owner can re-approve the same calldata —
+// a failed run strands nothing. The second Safe MUST dry-run the calldata before approving.
 
 import {Epoch, currentEpoch} from "./lib/Epoch.sol";
 import {FixedU18, ONE, ZERO} from "./lib/FixedU18.sol";
