@@ -20,13 +20,12 @@ contract StreamWeightActor is UnanimousGovernance {
     using OwnersLibrary for address;
 
     IServiceRewardsActor immutable SRA;
-    Epoch immutable QUARTER;
     Epoch immutable HOLD;
 
     /// @notice Deploys the actor with its two initial owners, bound to a Service Rewards Actor.
     /// @param owner1 First owner.
     /// @param owner2 Second owner.
-    /// @param sra Service Rewards Actor supplying QUARTER and gating `quarterlyGateCheck`.
+    /// @param sra Service Rewards Actor gating `quarterlyGateCheck`.
     /// @param hold Timelock applied to unanimous `setGateParams` updates (epochs), fixed at
     ///        deployment; per-network value (mainnet 20160 = 7 days at 30s/epoch; devnet/calibnet
     ///        compress it). 0 = no delay (executes on unanimity).
@@ -35,7 +34,6 @@ contract StreamWeightActor is UnanimousGovernance {
         owner2.addOwner();
 
         SRA = sra;
-        QUARTER = sra.EPOCHS_PER_QUARTER();
         HOLD = hold;
 
         GateParamsLibrary.init();
