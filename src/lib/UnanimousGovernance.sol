@@ -14,6 +14,7 @@ contract UnanimousGovernance {
 
     event Submitted(bytes32 indexed taskId);
     event Approved(bytes32 indexed taskId, address indexed owner);
+    event Rejected(bytes32 indexed taskId, address indexed owner);
 
     error HoldUntil(Epoch until);
     error NotOwner(address account);
@@ -92,5 +93,17 @@ contract UnanimousGovernance {
             // wait
             taskInfo.task = loaded;
         }
+    }
+
+    /// @param taskId The identifier of the pending task to reject
+    function _veto(bytes32 taskId) internal {
+        // load
+        PendingTaskInfo storage taskInfo = PendingTaskLibrary.getTasksSlot()[taskId];
+
+        // modify
+        require(msg.sender.isOwner(), NotOwner(msg.sender));
+        delete taskInfo.task;
+
+        emit Rejected(taskId, msg.sender);
     }
 }
