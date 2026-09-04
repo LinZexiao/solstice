@@ -161,6 +161,10 @@ contract FVMRewardActor {
     ///      submitShares path. Etched storage starts zeroed, default false, other tests unaffected.
     bool public failSetShares;
 
+    /// @notice Test helper flag: when set, StepWeightRecords returns USR_ILLEGAL_ARGUMENT
+    /// unconditionally at queue time, exercising the SWA's rollback on gate-write rejection.
+    bool public failStepWeight;
+
     /// @notice Cumulative FIL minted through f02, all streams (T = position 9 / FilMined).
     uint256 public totalMintedReward;
     /// @notice Cumulative burn: w0 residual plus period-fold rounding dust (B).
@@ -215,6 +219,11 @@ contract FVMRewardActor {
     /// @notice Test helper: flip the SetShares failure-injection flag (A1).
     function mockFailSetShares(bool fail) external {
         failSetShares = fail;
+    }
+
+    /// @notice Test helper: flip the StepWeightRecords failure-injection flag.
+    function mockFailStepWeight(bool fail) external {
+        failStepWeight = fail;
     }
 
     /// @notice Test helper: simulates AwardBlockReward, splitting `br` by clamped weight into a
@@ -312,6 +321,9 @@ contract FVMRewardActor {
 
     function _queueWeightWrite(PendingOp op, bytes calldata params) internal returns (uint32, uint64, bytes memory) {
         if (msg.sender != swa) return (USR_FORBIDDEN, 0, "");
+        // StepWeight failure injection: reject gate-originated writes, as queue-time schedule
+        // validation would (FIP-0118 §3.1.1 gate-write rejection). Discretionary writes unaffected.
+        if (op == PendingOp.STEP_WEIGHT && failStepWeight) return (USR_ILLEGAL_ARGUMENT, 0, "");
         // Params CBOR: [[id...], [[vStart,slope,tStart,floor,cap]...]]
         (uint64[] memory ids, WeightRecord[] memory records) = _decodeSetWeightRecordsParams(params);
         if (ids.length != records.length) return (USR_ILLEGAL_ARGUMENT, 0, "");
