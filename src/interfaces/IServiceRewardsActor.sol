@@ -8,5 +8,5 @@ interface IServiceRewardsActor {
     function aggregatedFilecoinPayVolume(uint64 quarter) external view returns (FixedU18 filecoinPayVolume);
     function qEnd(uint64 quarter) external view returns (Epoch quarterEnd);
     function EPOCHS_PER_QUARTER() external view returns (Epoch oneQuarter);
-    function sraUpgradeHold() external view returns (Epoch hold);
+    function SRA_UPGRADE_HOLD() external view returns (Epoch hold);
 }

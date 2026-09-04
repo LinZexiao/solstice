@@ -59,8 +59,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
 
     /// @notice Upgrade-hold duration in epochs, fixed at deployment (spec 95eb9e0 §4.2: the
     ///         SRA's upgrade hold is SRA state, not a governance parameter).
-    // forge-lint: disable-next-item(screaming-snake-case-immutable) — getter name is fixed by the interface (sraUpgradeHold)
-    Epoch public immutable sraUpgradeHold;
+    Epoch public immutable SRA_UPGRADE_HOLD;
 
     event OrchestratorAdmitted(address indexed orch, address wallet);
     event OrchestratorRemoved(address indexed orch);
@@ -129,7 +128,7 @@ contract ServiceRewardsActor is UnanimousGovernance {
         POST_PERIOD = postPeriod;
         VERIFICATION_WINDOW = verificationWindow;
         ACTIVATION_EPOCH = activationEpoch;
-        sraUpgradeHold = upgradeHold;
+        SRA_UPGRADE_HOLD = upgradeHold;
 
         // id allocator starts at 1: 0 is the unregistered sentinel (activeIdOf[addr] == 0)
         SraStorage.registry().nextId = 1;
