@@ -20,20 +20,14 @@ contract StreamWeightActorTest is MockRewardTest {
     uint64 constant STREAM_ID = 1;
     address constant WRITER = address(0xBEEF);
 
-    Epoch constant TEST_QUARTER = Epoch.wrap(262980); // epochs per 365.25/4 days
-
     function setUp() public override {
         super.setUp();
         owner1 = makeAddr("owner1");
         owner2 = makeAddr("owner2");
 
-        address sra = makeAddr("sra");
-        vm.mockCall(
-            sra, abi.encodeWithSelector(IServiceRewardsActor.EPOCHS_PER_QUARTER.selector), abi.encode(TEST_QUARTER)
-        );
-
         // mainnet hold: StreamWeightGate tests exercise the timelock boundary at MAINNET_TIMELOCK
-        actor = new StreamWeightActor(owner1, owner2, IServiceRewardsActor(sra), Epoch.wrap(MAINNET_TIMELOCK));
+        actor =
+            new StreamWeightActor(owner1, owner2, IServiceRewardsActor(makeAddr("sra")), Epoch.wrap(MAINNET_TIMELOCK));
         rewardActor().mockSwa(address(actor));
     }
 
