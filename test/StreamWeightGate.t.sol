@@ -42,7 +42,7 @@ contract StreamWeightGateTest is StreamWeightActorTest {
     }
 
     function _sraMock() internal returns (IServiceRewardsActor sra) {
-        sra = IServiceRewardsActor(makeAddr("sra")); // same label the parent setUp used to mock EPOCHS_PER_QUARTER
+        sra = IServiceRewardsActor(makeAddr("sra")); // the actor's SRA handle (same label setUp passed the constructor)
     }
 
     function _mockFpv(IServiceRewardsActor sra, uint64 quarter, uint256 value) internal {
@@ -155,7 +155,7 @@ contract StreamWeightGateTest is StreamWeightActorTest {
         GateParams memory params = _gateParams(4000 ether, 2.7 ether, 1);
         uint64 shortHold = 100;
 
-        IServiceRewardsActor sra = _sraMock(); // same mocked address parent setUp used for QUARTER
+        IServiceRewardsActor sra = _sraMock(); // SRA handle for the second actor
         StreamWeightActor shortActor = new StreamWeightActor(owner1, owner2, sra, Epoch.wrap(shortHold));
 
         // Unanimous votes on both actors at the same epoch.
@@ -301,6 +301,47 @@ contract StreamWeightGateTest is StreamWeightActorTest {
 
         (uint256 base,, uint64 steps,) = _storedGateParams();
         assertEq(base, 4000 ether, "re-approved params apply after the hold");
+        assertEq(steps, 1);
+    }
+
+    /// @dev A task whose params are out of range can never complete: execution reverts
+    ///      StepsOutOfRange and the unanimous state rolls back with it, leaving the task stuck.
+    ///      An owner vetoes the stuck task, and a fresh submission of legal params recovers the
+    ///      gate update end to end.
+    function test_SetGateParams_OutOfRangeTask_VetoRecoveryAppliesLegalParams() public {
+        GateParams memory bad = _gateParams(4000 ether, 2.7 ether, 9); // 9 > 8 gate steps
+        bytes32 badTaskId = keccak256(abi.encodePacked(StreamWeightActor.setGateParams.selector, abi.encode(bad)));
+        _submitGateParams(bad);
+        vm.roll(block.number + MAINNET_TIMELOCK);
+
+        // Permissionless completion reverts at the bound; the task survives the failed execution
+        // (whole-tx rollback) and stays pending -- a second attempt reverts identically.
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(StreamWeightActor.StepsOutOfRange.selector);
+        actor.setGateParams(bad);
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert(StreamWeightActor.StepsOutOfRange.selector);
+        actor.setGateParams(bad);
+
+        (uint256 base,, uint64 steps,) = _storedGateParams();
+        assertEq(base, 3500 ether, "stuck task never lands its params");
+        assertEq(steps, 0);
+
+        // Owner veto clears the stuck task.
+        vm.expectEmit(true, true, true, true);
+        emit UnanimousGovernance.Rejected(badTaskId, owner1);
+        vm.prank(owner1);
+        actor.veto(badTaskId);
+
+        // A fresh submission of legal params completes normally after the hold.
+        GateParams memory good = _gateParams(4000 ether, 2.7 ether, 1);
+        _submitGateParams(good);
+        vm.roll(block.number + MAINNET_TIMELOCK);
+        vm.prank(makeAddr("stranger"));
+        actor.setGateParams(good);
+
+        (base,, steps,) = _storedGateParams();
+        assertEq(base, 4000 ether, "legal params apply after veto recovery");
         assertEq(steps, 1);
     }
 
